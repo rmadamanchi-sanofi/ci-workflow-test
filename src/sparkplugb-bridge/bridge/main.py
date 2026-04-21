@@ -23,3 +23,8 @@ def validate_tag(name: str, value) -> bool:
     if "/" not in name:
         return False
     return True
+
+
+def get_version() -> str:
+    """Return the current bridge version."""
+    return "0.1.0"
