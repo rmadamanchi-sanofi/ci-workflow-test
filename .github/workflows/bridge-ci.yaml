@@ -1,0 +1,53 @@
+name: 'CI checks on PR'
+run-name: 'CI checks on PR'
+
+on:
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - "src/sparkplugb-bridge/**"
+
+jobs:
+  python-ci:
+    name: 'Python CI — tests, lint, security'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        working-directory: src/sparkplugb-bridge
+        run: pip install -r requirements-dev.txt
+
+      - name: Run pytest with coverage
+        working-directory: src/sparkplugb-bridge
+        run: |
+          set +e
+          pytest --cov-report=term 2>&1 | tee coverage-report.txt
+          PYTEST_EXIT=$?
+          set -e
+          exit $PYTEST_EXIT
+
+      - name: Post coverage report as PR comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "## Coverage Report
+          \`\`\`
+          $(cat src/sparkplugb-bridge/coverage-report.txt)
+          \`\`\`"
+
+      - name: Run ruff lint
+        working-directory: src/sparkplugb-bridge
+        run: ruff check .
