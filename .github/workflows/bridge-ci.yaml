@@ -32,7 +32,7 @@ jobs:
         working-directory: src/sparkplugb-bridge
         run: |
           set +e
-          pytest --cov-report=term 2>&1 | tee coverage-report.txt
+          pytest --cov-report=term-missing 2>&1 | tee pytest-output.txt
           PYTEST_EXIT=$?
           set -e
           exit $PYTEST_EXIT
@@ -41,11 +41,15 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: src/sparkplugb-bridge
         run: |
+          COVERAGE=$(sed -n '/^Name.*Stmts/,/^TOTAL/p' pytest-output.txt)
+          TOTAL_LINE=$(grep "^TOTAL" pytest-output.txt || echo "No coverage data")
           gh pr comment ${{ github.event.pull_request.number }} \
-            --body "## Coverage Report
+            --repo ${{ github.repository }} \
+            --body "## 📊 Coverage Report
           \`\`\`
-          $(cat src/sparkplugb-bridge/coverage-report.txt)
+          $COVERAGE
           \`\`\`"
 
       - name: Run ruff lint
