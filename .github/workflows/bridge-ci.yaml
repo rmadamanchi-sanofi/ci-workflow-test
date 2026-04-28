@@ -44,13 +44,12 @@ jobs:
         working-directory: src/sparkplugb-bridge
         run: |
           COVERAGE=$(sed -n '/^Name.*Stmts/,/^TOTAL/p' pytest-output.txt)
-          TOTAL_LINE=$(grep "^TOTAL" pytest-output.txt || echo "No coverage data")
-          gh pr comment ${{ github.event.pull_request.number }} \
-            --repo ${{ github.repository }} \
-            --body "## 📊 Coverage Report
-          \`\`\`
-          $COVERAGE
-          \`\`\`"
+          BODY=$(printf '## 📊 Coverage Report\n```\n%s\n```' "$COVERAGE")
+          curl -s -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$(printf '{"body": "%s"}' "$(echo "$BODY" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')")" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments"
 
       - name: Run ruff lint
         working-directory: src/sparkplugb-bridge
