@@ -135,7 +135,7 @@ jobs:
           echo "Changed files:"
           echo "$CHANGED_FILES"
 
-          SITE=$(echo "$CHANGED_FILES" | grep '^uns/sites/\|^projects/sitewise/' | head -1 | sed -E 's|^(uns/sites/|projects/sitewise/)([^/]+)/.*|\2|')
+          SITE=$(echo "$CHANGED_FILES" | grep -E '^(uns/sites/|projects/sitewise/)' | head -1 | awk -F'/' '{print $3}')
 
           if [ -z "$SITE" ]; then
             echo "::error::Could not detect site from changed files"
