@@ -1,11 +1,16 @@
 name: 'Generate SiteWise Terraform'
-run-name: 'Generate SiteWise TF — ${{ github.head_ref }}'
+run-name: 'Generate SiteWise TF — ${{ github.head_ref || github.ref_name }}'
 
 on:
   pull_request:
     branches: [sitewise-uploads]
     paths:
       - "uns/sites/**"
+  push:
+    branches: [sitewise-uploads]
+    paths:
+      - "uns/sites/**"
+      - "projects/sitewise/**"
 
 permissions:
   contents: write
@@ -14,6 +19,7 @@ permissions:
 jobs:
   generate:
     name: 'Generate Terraform from JSON'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
 
     steps:
@@ -111,3 +117,56 @@ jobs:
           </details>
 
           > In production, this would show actual \`terraform plan\` output against the target AWS account."
+
+  promote:
+    name: 'Create PR to develop'
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed site
+        id: detect
+        run: |
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          SITE=$(echo "$CHANGED_FILES" | grep '^uns/sites/\|^projects/sitewise/' | head -1 | sed -E 's|^(uns/sites/|projects/sitewise/)([^/]+)/.*|\2|')
+
+          if [ -z "$SITE" ]; then
+            echo "::error::Could not detect site from changed files"
+            exit 1
+          fi
+
+          echo "site=$SITE" >> "$GITHUB_OUTPUT"
+          echo "Detected site: $SITE"
+
+      - name: Create PR to develop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SITE="${{ steps.detect.outputs.site }}"
+          BRANCH="auto/sitewise-${SITE}-${{ github.run_number }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "$BRANCH"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --base develop \
+            --head "$BRANCH" \
+            --title "Deploy SiteWise changes for $SITE" \
+            --body "Auto-created after merge to sitewise-uploads.
+
+          **Site:** $SITE
+          **Source:** sitewise-uploads branch
+
+          This PR promotes approved SiteWise changes to develop for deployment to Dev.
+
+          Merging this PR will trigger deployment to the Dev environment."
