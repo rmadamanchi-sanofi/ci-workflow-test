@@ -1,0 +1,113 @@
+name: 'Generate SiteWise Terraform'
+run-name: 'Generate SiteWise TF — ${{ github.head_ref }}'
+
+on:
+  pull_request:
+    branches: [sitewise-uploads]
+    paths:
+      - "uns/sites/**"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate:
+    name: 'Generate Terraform from JSON'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Detect changed site
+        id: detect
+        run: |
+          CHANGED_FILES=$(gh pr diff ${{ github.event.pull_request.number }} --name-only)
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          SITE=$(echo "$CHANGED_FILES" | grep '^uns/sites/' | head -1 | cut -d'/' -f3)
+          TYPE=$(echo "$CHANGED_FILES" | grep '^uns/sites/' | head -1 | cut -d'/' -f4)
+
+          if [ -z "$SITE" ]; then
+            echo "::error::Could not detect site from changed files"
+            exit 1
+          fi
+
+          echo "site=$SITE" >> "$GITHUB_OUTPUT"
+          echo "type=$TYPE" >> "$GITHUB_OUTPUT"
+          echo "Detected site: $SITE, type: $TYPE"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run generator script
+        run: |
+          SITE="${{ steps.detect.outputs.site }}"
+          TYPE="${{ steps.detect.outputs.type }}"
+
+          INPUT_FILE=$(find "uns/sites/$SITE/$TYPE" -name '*.json' | head -1)
+          if [ -z "$INPUT_FILE" ]; then
+            echo "::error::No JSON file found in uns/sites/$SITE/$TYPE"
+            exit 1
+          fi
+
+          OUTPUT_DIR="projects/sitewise/$SITE"
+          mkdir -p "$OUTPUT_DIR"
+
+          echo "Generating Terraform from $INPUT_FILE"
+          python uns/generator/generate_sitewise_tf.py \
+            --input "$INPUT_FILE" \
+            --output "$OUTPUT_DIR/${TYPE}.tf" \
+            --site "$SITE"
+
+      - name: Commit generated files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          SITE="${{ steps.detect.outputs.site }}"
+
+          git add "projects/sitewise/$SITE/"
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: auto-generate Terraform for $SITE"
+            git push
+          fi
+
+      - name: Post terraform plan as PR comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SITE="${{ steps.detect.outputs.site }}"
+          TF_FILE="projects/sitewise/$SITE/${{ steps.detect.outputs.type }}.tf"
+
+          if [ -f "$TF_FILE" ]; then
+            TF_CONTENT=$(cat "$TF_FILE")
+          else
+            TF_CONTENT="No Terraform file generated"
+          fi
+
+          gh pr comment ${{ github.event.pull_request.number }} --body "## Terraform Plan — $SITE
+
+          Generated Terraform for site: **$SITE**
+
+          <details>
+          <summary>Generated Terraform</summary>
+
+          \`\`\`hcl
+          $TF_CONTENT
+          \`\`\`
+
+          </details>
+
+          > In production, this would show actual \`terraform plan\` output against the target AWS account."

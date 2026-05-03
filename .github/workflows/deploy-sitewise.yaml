@@ -1,0 +1,117 @@
+name: 'Deploy SiteWise'
+run-name: 'Deploy SiteWise — ${{ github.ref_name }}'
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - "release/**"
+    paths:
+      - "projects/sitewise/**"
+
+jobs:
+  detect-site:
+    name: 'Detect changed site'
+    runs-on: ubuntu-latest
+    outputs:
+      site: ${{ steps.detect.outputs.site }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect site from changed files
+        id: detect
+        run: |
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          SITE=$(echo "$CHANGED_FILES" | grep '^projects/sitewise/' | head -1 | cut -d'/' -f3)
+          echo "site=$SITE" >> "$GITHUB_OUTPUT"
+          echo "Detected site: $SITE"
+
+  deploy:
+    name: 'Deploy to ${{ needs.detect-site.outputs.site }}'
+    needs: detect-site
+    runs-on: ubuntu-latest
+    environment: ${{ (github.ref_name == 'develop' && 'dev') || (startsWith(github.ref_name, 'release/') && 'test') || (github.ref_name == 'main' && 'prod') || 'dev' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine environment
+        id: env
+        run: |
+          if [ "${{ github.ref_name }}" = "develop" ]; then
+            echo "env=dev" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref_name }}" == release/* ]]; then
+            echo "env=test" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref_name }}" = "main" ]; then
+            echo "env=prod" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy SiteWise (simulated)
+        run: |
+          SITE="${{ needs.detect-site.outputs.site }}"
+          ENV="${{ steps.env.outputs.env }}"
+
+          echo "============================================"
+          echo "  DEPLOYING SiteWise for site: $SITE"
+          echo "  Environment: $ENV"
+          echo "  Branch: ${{ github.ref_name }}"
+          echo "============================================"
+          echo ""
+          echo "In production, this would run:"
+          echo "  terraform -chdir=projects/sitewise/$SITE init -backend-config=../../env/$ENV/backend.hcl"
+          echo "  terraform -chdir=projects/sitewise/$SITE plan"
+          echo "  terraform -chdir=projects/sitewise/$SITE apply -auto-approve"
+          echo ""
+          echo "State file: s3://tfstate-bucket/sitewise-$SITE.tfstate"
+          echo ""
+
+          if [ -f "projects/sitewise/$SITE/models.tf" ]; then
+            echo "Generated models.tf content:"
+            cat "projects/sitewise/$SITE/models.tf"
+          fi
+
+          echo ""
+          echo "Deployment simulation complete."
+
+  create-release:
+    name: 'Create release branch + PR'
+    needs: [detect-site, deploy]
+    if: github.ref_name == 'develop'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create release branch and PR to main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SITE="${{ needs.detect-site.outputs.site }}"
+          RELEASE_BRANCH="release/sitewise-$SITE-v${{ github.run_number }}"
+
+          echo "Creating release branch: $RELEASE_BRANCH"
+          git checkout -b "$RELEASE_BRANCH"
+          git push origin "$RELEASE_BRANCH"
+
+          gh pr create \
+            --base main \
+            --head "$RELEASE_BRANCH" \
+            --title "Release SiteWise $SITE v${{ github.run_number }}" \
+            --body "Auto-created after successful Dev deployment for site: **$SITE**
+
+          This PR promotes the SiteWise changes to production.
+
+          - Dev deployment: ✅ Successful
+          - Test deployment: Will trigger on release branch creation
+          - Prod deployment: Will trigger on merge to main
+
+          **Requires manual approval to merge.**"
