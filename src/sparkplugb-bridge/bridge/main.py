@@ -27,4 +27,4 @@ def validate_tag(name: str, value) -> bool:
 
 def get_version() -> str:
     """Return the current bridge version."""
-    return "0.2.0"
+    return "0.3.0"
