@@ -5,7 +5,7 @@ models/**                      @rmadamanchi-sanofi
 assets/waterford/**            @rmadamanchi-sanofi
 assets/dublin/**               @rmadamanchi-sanofi
 
-# Platform team owns generator, workflows, and generated TF
-uns/generator/**               @rmadamanchi-sanofi
+# Platform team owns scripts, workflows, and generated TF
+scripts/**                     @rmadamanchi-sanofi
 .github/workflows/**           @rmadamanchi-sanofi
 projects/sitewise/**           @rmadamanchi-sanofi
