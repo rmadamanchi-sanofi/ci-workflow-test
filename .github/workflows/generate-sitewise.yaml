@@ -1,16 +1,12 @@
 name: 'Generate SiteWise Terraform'
-run-name: 'Generate SiteWise TF — ${{ github.head_ref || github.ref_name }}'
+run-name: 'Generate SiteWise TF — ${{ github.ref_name }}'
 
 on:
-  pull_request:
-    branches: [sitewise-uploads]
-    paths:
-      - "uns/sites/**"
   push:
-    branches: [sitewise-uploads]
+    branches: [ignition]
     paths:
-      - "uns/sites/**"
-      - "projects/sitewise/**"
+      - "models/**"
+      - "assets/**"
 
 permissions:
   contents: write
@@ -18,37 +14,38 @@ permissions:
 
 jobs:
   generate:
-    name: 'Generate Terraform from JSON'
-    if: github.event_name == 'pull_request'
+    name: 'Generate Terraform and merge to develop'
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout PR branch
+      - name: Checkout ignition branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
+          ref: ignition
+          fetch-depth: 2
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Detect changed site
+      - name: Detect change type and site
         id: detect
         run: |
-          CHANGED_FILES=$(gh pr diff ${{ github.event.pull_request.number }} --name-only)
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
           echo "Changed files:"
           echo "$CHANGED_FILES"
 
-          SITE=$(echo "$CHANGED_FILES" | grep '^uns/sites/' | head -1 | cut -d'/' -f3)
-          TYPE=$(echo "$CHANGED_FILES" | grep '^uns/sites/' | head -1 | cut -d'/' -f4)
+          TYPE=""
+          SITE=""
 
-          if [ -z "$SITE" ]; then
-            echo "::error::Could not detect site from changed files"
-            exit 1
+          if echo "$CHANGED_FILES" | grep -q '^models/'; then
+            TYPE="models"
+            SITE="global"
+          elif echo "$CHANGED_FILES" | grep -q '^assets/'; then
+            TYPE="assets"
+            SITE=$(echo "$CHANGED_FILES" | grep '^assets/' | head -1 | cut -d'/' -f2)
           fi
 
-          echo "site=$SITE" >> "$GITHUB_OUTPUT"
           echo "type=$TYPE" >> "$GITHUB_OUTPUT"
-          echo "Detected site: $SITE, type: $TYPE"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "site=$SITE" >> "$GITHUB_OUTPUT"
+          echo "Detected type: $TYPE, site: $SITE"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -57,19 +54,24 @@ jobs:
 
       - name: Run generator script
         run: |
-          SITE="${{ steps.detect.outputs.site }}"
           TYPE="${{ steps.detect.outputs.type }}"
+          SITE="${{ steps.detect.outputs.site }}"
 
-          INPUT_FILE=$(find "uns/sites/$SITE/$TYPE" -name '*.json' | head -1)
+          if [ "$TYPE" = "models" ]; then
+            INPUT_FILE=$(find "models" -name '*.json' | head -1)
+            OUTPUT_DIR="projects/sitewise/models"
+          else
+            INPUT_FILE=$(find "assets/$SITE" -name '*.json' | head -1)
+            OUTPUT_DIR="projects/sitewise/$SITE"
+          fi
+
           if [ -z "$INPUT_FILE" ]; then
-            echo "::error::No JSON file found in uns/sites/$SITE/$TYPE"
+            echo "::error::No JSON file found for $TYPE/$SITE"
             exit 1
           fi
 
-          OUTPUT_DIR="projects/sitewise/$SITE"
           mkdir -p "$OUTPUT_DIR"
-
-          echo "Generating Terraform from $INPUT_FILE"
+          echo "Generating Terraform from $INPUT_FILE → $OUTPUT_DIR"
           python uns/generator/generate_sitewise_tf.py \
             --input "$INPUT_FILE" \
             --output "$OUTPUT_DIR/${TYPE}.tf" \
@@ -80,93 +82,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          SITE="${{ steps.detect.outputs.site }}"
-
-          git add "projects/sitewise/$SITE/"
+          git add projects/sitewise/
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "chore: auto-generate Terraform for $SITE"
+            git commit -m "chore: auto-generate Terraform for ${{ steps.detect.outputs.site }}"
             git push
           fi
 
-      - name: Post terraform plan as PR comment
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Merge to develop (auto — no PR)
         run: |
-          SITE="${{ steps.detect.outputs.site }}"
-          TF_FILE="projects/sitewise/$SITE/${{ steps.detect.outputs.type }}.tf"
-
-          if [ -f "$TF_FILE" ]; then
-            TF_CONTENT=$(cat "$TF_FILE")
-          else
-            TF_CONTENT="No Terraform file generated"
-          fi
-
-          gh pr comment ${{ github.event.pull_request.number }} --body "## Terraform Plan — $SITE
-
-          Generated Terraform for site: **$SITE**
-
-          <details>
-          <summary>Generated Terraform</summary>
-
-          \`\`\`hcl
-          $TF_CONTENT
-          \`\`\`
-
-          </details>
-
-          > In production, this would show actual \`terraform plan\` output against the target AWS account."
-
-  promote:
-    name: 'Create PR to develop'
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Detect changed site
-        id: detect
-        run: |
-          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
-          echo "Changed files:"
-          echo "$CHANGED_FILES"
-
-          SITE=$(echo "$CHANGED_FILES" | grep -E '^(uns/sites/|projects/sitewise/)' | head -1 | awk -F'/' '{print $3}')
-
-          if [ -z "$SITE" ]; then
-            echo "::error::Could not detect site from changed files"
-            exit 1
-          fi
-
-          echo "site=$SITE" >> "$GITHUB_OUTPUT"
-          echo "Detected site: $SITE"
-
-      - name: Create PR to develop
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          SITE="${{ steps.detect.outputs.site }}"
-          BRANCH="auto/sitewise-${SITE}-${{ github.run_number }}"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git checkout -b "$BRANCH"
-          git push origin "$BRANCH"
-
-          gh pr create \
-            --base develop \
-            --head "$BRANCH" \
-            --title "Deploy SiteWise changes for $SITE" \
-            --body "Auto-created after merge to sitewise-uploads.
-
-          **Site:** $SITE
-          **Source:** sitewise-uploads branch
-
-          This PR promotes approved SiteWise changes to develop for deployment to Dev.
-
-          Merging this PR will trigger deployment to the Dev environment."
+          git fetch origin develop
+          git checkout develop
+          git merge origin/ignition --no-edit -m "chore: auto-merge ignition → develop"
+          git push origin develop

@@ -1,12 +1,11 @@
-# SiteWise CI/CD — Code Owners
-# Models: central model team manages all models across all sites
-uns/sites/*/models/**          @rmadamanchi-sanofi
+# Models — central Ignition team (Patricia)
+models/**                      @rmadamanchi-sanofi
 
-# Assets: per-site teams (in production, each site has its own team)
-uns/sites/waterford/assets/**  @rmadamanchi-sanofi
-uns/sites/dublin/assets/**     @rmadamanchi-sanofi
+# Assets — per-site teams
+assets/waterford/**            @rmadamanchi-sanofi
+assets/dublin/**               @rmadamanchi-sanofi
 
-# Platform team owns generator, workflows, and shared infra
+# Platform team owns generator, workflows, and generated TF
 uns/generator/**               @rmadamanchi-sanofi
 .github/workflows/**           @rmadamanchi-sanofi
 projects/sitewise/**           @rmadamanchi-sanofi
