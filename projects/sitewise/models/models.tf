@@ -62,6 +62,13 @@ resource "awscc_iotsitewise_asset_model" "trayhandleredgetoplatform" {
       }
     },
     {
+      name      = "EquipmentInfo/Location"
+      data_type = "STRING"
+      type = {
+        measurement = {}
+      }
+    },
+    {
       name      = "EquipmentInfo/MachineCode"
       data_type = "STRING"
       type = {
