@@ -1,0 +1,464 @@
+name: 'SiteWise Pipeline'
+run-name: 'SiteWise Pipeline — ${{ github.ref_name }}'
+
+# OPTION 2: Single workflow — no GitHub App required
+# All environments deploy as sequential jobs within one workflow run.
+# Uses standard GITHUB_TOKEN (no cross-workflow triggering needed).
+#
+# Trigger manually for testing. In production, change to:
+#   on:
+#     push:
+#       branches: [ignition]
+#       paths: ["models/**", "assets/**"]
+
+on:
+  workflow_dispatch:
+    inputs:
+      trigger_type:
+        description: 'Simulate change type'
+        required: true
+        default: 'models'
+        type: choice
+        options:
+          - models
+          - assets
+
+concurrency:
+  group: sitewise-pipeline-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────
+  # Stage 1: Validate JSON and generate Terraform
+  # ─────────────────────────────────────────────────────────────────
+  generate:
+    name: '1. Validate & Generate'
+    runs-on: ubuntu-latest
+    outputs:
+      site: ${{ steps.detect.outputs.site }}
+      type: ${{ steps.detect.outputs.type }}
+      has_changes: ${{ steps.commit.outputs.has_changes }}
+
+    steps:
+      - name: Checkout ignition branch
+        uses: actions/checkout@v4
+        with:
+          ref: ignition
+          fetch-depth: 2
+
+      - name: Detect change type and site
+        id: detect
+        run: |
+          set -euo pipefail
+
+          # For workflow_dispatch, use input; for push events, detect from diff
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TYPE="${{ inputs.trigger_type }}"
+            if [ "$TYPE" = "models" ]; then
+              SITE="global"
+            else
+              # Find first site with JSON files
+              SITE=$(find assets -mindepth 1 -maxdepth 1 -type d | head -1 | xargs basename)
+              [ -z "$SITE" ] && SITE="waterford"
+            fi
+          else
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+            echo "Changed files:"
+            echo "$CHANGED_FILES"
+
+            TYPE=""
+            SITE=""
+
+            if echo "$CHANGED_FILES" | grep -q '^models/'; then
+              TYPE="models"
+              SITE="global"
+            elif echo "$CHANGED_FILES" | grep -q '^assets/'; then
+              TYPE="assets"
+              SITE=$(echo "$CHANGED_FILES" | grep '^assets/' | head -1 | cut -d'/' -f2)
+            fi
+          fi
+
+          if [ -z "$TYPE" ]; then
+            echo "::error::Could not detect change type. Expected changes under models/ or assets/"
+            exit 1
+          fi
+
+          if [ -z "$SITE" ]; then
+            echo "::error::Could not detect site. Expected folder structure: assets/{site}/"
+            exit 1
+          fi
+
+          echo "type=$TYPE" >> "$GITHUB_OUTPUT"
+          echo "site=$SITE" >> "$GITHUB_OUTPUT"
+          echo "✅ Detected — type: $TYPE, site: $SITE"
+
+      - name: Validate JSON input
+        id: validate
+        run: |
+          set -euo pipefail
+
+          TYPE="${{ steps.detect.outputs.type }}"
+          SITE="${{ steps.detect.outputs.site }}"
+
+          if [ "$TYPE" = "models" ]; then
+            INPUT_FILE=$(find "models" -name '*.json' -type f | head -1)
+          else
+            INPUT_FILE=$(find "assets/$SITE" -name '*.json' -type f | head -1)
+          fi
+
+          if [ -z "$INPUT_FILE" ]; then
+            echo "::error::No JSON file found for $TYPE/$SITE"
+            exit 1
+          fi
+
+          echo "input_file=$INPUT_FILE" >> "$GITHUB_OUTPUT"
+
+          # Validate JSON with detailed error reporting
+          if ! python3 -c "
+          import json, sys
+          try:
+              with open('$INPUT_FILE') as f:
+                  data = json.load(f)
+              if not isinstance(data, dict):
+                  print(f'::error::JSON root must be an object, got {type(data).__name__}')
+                  sys.exit(1)
+              if 'name' not in data:
+                  print('::error::JSON missing required field: name')
+                  sys.exit(1)
+              if 'tagType' not in data:
+                  print('::error::JSON missing required field: tagType')
+                  sys.exit(1)
+              print(f'✅ Valid JSON: {len(json.dumps(data))} bytes')
+          except json.JSONDecodeError as e:
+              print(f'::error file={\"$INPUT_FILE\"},line={e.lineno},col={e.colno}::Invalid JSON: {e.msg}')
+              sys.exit(1)
+          "; then
+            echo "::error::JSON validation failed for $INPUT_FILE"
+            exit 1
+          fi
+
+          echo "✅ JSON validation passed: $INPUT_FILE"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run generator script
+        id: generate
+        run: |
+          set -euo pipefail
+
+          TYPE="${{ steps.detect.outputs.type }}"
+          SITE="${{ steps.detect.outputs.site }}"
+          INPUT_FILE="${{ steps.validate.outputs.input_file }}"
+
+          if [ "$TYPE" = "models" ]; then
+            OUTPUT_DIR="projects/sitewise/models"
+            OUTPUT_FILE="$OUTPUT_DIR/models.tf"
+          else
+            OUTPUT_DIR="projects/sitewise/$SITE"
+            OUTPUT_FILE="$OUTPUT_DIR/assets.tf"
+          fi
+
+          mkdir -p "$OUTPUT_DIR"
+          echo "output_dir=$OUTPUT_DIR" >> "$GITHUB_OUTPUT"
+          echo "output_file=$OUTPUT_FILE" >> "$GITHUB_OUTPUT"
+
+          python scripts/generate_sitewise_tf.py \
+            --input "$INPUT_FILE" \
+            --output "$OUTPUT_FILE" \
+            --site "$SITE" \
+            --type "$TYPE"
+
+          if [ ! -f "$OUTPUT_FILE" ]; then
+            echo "::error::Generator did not produce output file: $OUTPUT_FILE"
+            exit 1
+          fi
+
+          echo "✅ Generated: $OUTPUT_FILE ($(wc -l < "$OUTPUT_FILE") lines)"
+
+      - name: Validate generated Terraform
+        run: |
+          set -euo pipefail
+
+          OUTPUT_DIR="${{ steps.generate.outputs.output_dir }}"
+
+          if ! command -v terraform &> /dev/null; then
+            wget -qO- https://releases.hashicorp.com/terraform/1.14.0/terraform_1.14.0_linux_amd64.zip | funzip > /usr/local/bin/terraform
+            chmod +x /usr/local/bin/terraform
+          fi
+
+          if ! terraform fmt -check -diff "$OUTPUT_DIR"; then
+            echo "::error::Generated Terraform is not properly formatted"
+            exit 1
+          fi
+
+          echo "✅ Terraform format validation passed"
+
+      - name: Commit and push to ignition
+        id: commit
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add projects/sitewise/
+          if git diff --cached --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "ℹ️ No changes — generated output is identical"
+          else
+            git commit -m "chore: auto-generate Terraform for ${{ steps.detect.outputs.type }}/${{ steps.detect.outputs.site }}"
+            git push
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Committed generated files to ignition"
+          fi
+
+      - name: Push to develop
+        if: steps.commit.outputs.has_changes == 'true'
+        run: |
+          set -euo pipefail
+
+          if ! git push origin ignition:develop; then
+            echo "::error::Failed to push to develop branch"
+            exit 1
+          fi
+          echo "✅ Updated develop branch"
+
+  # ─────────────────────────────────────────────────────────────────
+  # Stage 2: Deploy to Dev (automatic, no approval)
+  # ─────────────────────────────────────────────────────────────────
+  deploy-dev:
+    name: '2. Deploy to Dev'
+    needs: [generate]
+    if: needs.generate.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Terraform Init
+        run: |
+          set -euo pipefail
+
+          SITE="${{ needs.generate.outputs.site }}"
+          echo "============================================"
+          echo "  terraform init"
+          echo "  -backend-config=env/dev/backend.hcl"
+          echo "  -chdir=projects/sitewise/$SITE"
+          echo "============================================"
+          echo "Terraform has been successfully initialized!"
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          set -euo pipefail
+
+          SITE="${{ needs.generate.outputs.site }}"
+          echo "============================================"
+          echo "  terraform plan -out=tfplan"
+          echo "  -var-file=env/dev/env_common.tfvars"
+          echo "  -chdir=projects/sitewise/$SITE"
+          echo "============================================"
+          echo ""
+          echo "Plan: 3 to add, 0 to change, 0 to destroy."
+
+          # In production: terraform plan -detailed-exitcode -out=tfplan
+          # Exit code 1 = error (fail), 2 = changes present (continue)
+
+      - name: Terraform Apply
+        run: |
+          set -euo pipefail
+
+          SITE="${{ needs.generate.outputs.site }}"
+          echo "============================================"
+          echo "  DEPLOYING to Dev"
+          echo "  Site: $SITE"
+          echo "  terraform apply -auto-approve tfplan"
+          echo "============================================"
+          echo ""
+          echo "Apply complete! Resources: 3 added, 0 changed, 0 destroyed."
+
+          # In production: terraform apply -auto-approve tfplan
+          # If this fails, subsequent jobs won't run (needs.deploy-dev.result != 'success')
+
+      - name: Create release branch
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          SITE="${{ needs.generate.outputs.site }}"
+          RELEASE_BRANCH="release/${SITE}/v${{ github.run_number }}"
+
+          git checkout -b "$RELEASE_BRANCH"
+          if ! git push origin "$RELEASE_BRANCH"; then
+            echo "::error::Failed to create release branch: $RELEASE_BRANCH"
+            exit 1
+          fi
+
+          echo "✅ Created release branch: $RELEASE_BRANCH"
+
+      - name: Post Dev deployment summary
+        if: always()
+        run: |
+          echo "## Dev Deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Site | ${{ needs.generate.outputs.site }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | dev |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | ${{ job.status }} |" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────────────────────────
+  # Stage 3: Deploy to Test (requires approval)
+  # ─────────────────────────────────────────────────────────────────
+  deploy-test:
+    name: '3. Deploy to Test'
+    needs: [generate, deploy-dev]
+    if: needs.deploy-dev.result == 'success'
+    runs-on: ubuntu-latest
+    environment: test
+
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: release/${{ needs.generate.outputs.site }}/v${{ github.run_number }}
+
+      - name: Terraform Init
+        run: |
+          set -euo pipefail
+
+          SITE="${{ needs.generate.outputs.site }}"
+          echo "============================================"
+          echo "  terraform init"
+          echo "  -backend-config=env/test/backend.hcl"
+          echo "  -chdir=projects/sitewise/$SITE"
+          echo "============================================"
+          echo "Terraform has been successfully initialized!"
+
+      - name: Terraform Plan
+        run: |
+          set -euo pipefail
+
+          SITE="${{ needs.generate.outputs.site }}"
+          echo "============================================"
+          echo "  terraform plan -out=tfplan"
+          echo "  -var-file=env/test/env_common.tfvars"
+          echo "  -chdir=projects/sitewise/$SITE"
+          echo "============================================"
+          echo ""
+          echo "Plan: 3 to add, 0 to change, 0 to destroy."
+
+      - name: Terraform Apply
+        run: |
+          set -euo pipefail
+
+          SITE="${{ needs.generate.outputs.site }}"
+          echo "============================================"
+          echo "  DEPLOYING to Test"
+          echo "  Site: $SITE"
+          echo "  terraform apply -auto-approve tfplan"
+          echo "============================================"
+          echo ""
+          echo "Apply complete! Resources: 3 added, 0 changed, 0 destroyed."
+
+      - name: Push to main
+        run: |
+          set -euo pipefail
+
+          SITE="${{ needs.generate.outputs.site }}"
+          RELEASE_BRANCH="release/${SITE}/v${{ github.run_number }}"
+
+          if ! git push origin "${RELEASE_BRANCH}:main"; then
+            echo "::error::Failed to push to main"
+            exit 1
+          fi
+
+          echo "✅ Updated main branch"
+
+      - name: Post Test deployment summary
+        if: always()
+        run: |
+          echo "## Test Deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Site | ${{ needs.generate.outputs.site }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | test |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | ${{ job.status }} |" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────────────────────────
+  # Stage 4: Deploy to Prod (requires approval)
+  # ─────────────────────────────────────────────────────────────────
+  deploy-prod:
+    name: '4. Deploy to Prod'
+    needs: [generate, deploy-test]
+    if: needs.deploy-test.result == 'success'
+    runs-on: ubuntu-latest
+    environment: prod
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Terraform Init
+        run: |
+          set -euo pipefail
+
+          SITE="${{ needs.generate.outputs.site }}"
+          echo "============================================"
+          echo "  terraform init"
+          echo "  -backend-config=env/prod/backend.hcl"
+          echo "  -chdir=projects/sitewise/$SITE"
+          echo "============================================"
+          echo "Terraform has been successfully initialized!"
+
+      - name: Terraform Plan
+        run: |
+          set -euo pipefail
+
+          SITE="${{ needs.generate.outputs.site }}"
+          echo "============================================"
+          echo "  terraform plan -out=tfplan"
+          echo "  -var-file=env/prod/env_common.tfvars"
+          echo "  -chdir=projects/sitewise/$SITE"
+          echo "============================================"
+          echo ""
+          echo "Plan: 3 to add, 0 to change, 0 to destroy."
+
+      - name: Terraform Apply
+        run: |
+          set -euo pipefail
+
+          SITE="${{ needs.generate.outputs.site }}"
+          echo "============================================"
+          echo "  DEPLOYING to Prod"
+          echo "  Site: $SITE"
+          echo "  terraform apply -auto-approve tfplan"
+          echo "============================================"
+          echo ""
+          echo "Apply complete! Resources: 3 added, 0 changed, 0 destroyed."
+
+      - name: Post Prod deployment summary
+        if: always()
+        run: |
+          echo "## Prod Deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Site | ${{ needs.generate.outputs.site }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | prod |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | ${{ job.status }} |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo ""
+          echo "🎉 Full pipeline complete — all environments deployed"

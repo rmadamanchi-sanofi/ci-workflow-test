@@ -8,6 +8,10 @@ on:
       - main
       - "release/**"
 
+concurrency:
+  group: deploy-sitewise-${{ github.ref_name }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pull-requests: write
@@ -16,6 +20,9 @@ jobs:
   deploy:
     name: 'Terraform Deploy'
     runs-on: ubuntu-latest
+    outputs:
+      env: ${{ steps.env.outputs.env }}
+      site: ${{ steps.site.outputs.site }}
     environment: ${{ (
         (github.ref_name == 'develop') && 'dev'
       ) || (
@@ -33,6 +40,8 @@ jobs:
       - name: Determine environment
         id: env
         run: |
+          set -euo pipefail
+
           BRANCH="${{ github.ref_name }}"
           if [ "$BRANCH" = "develop" ]; then
             ENV="dev"
@@ -50,19 +59,44 @@ jobs:
       - name: Detect site from changes
         id: site
         run: |
+          set -euo pipefail
+
           CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git show --name-only --pretty="" HEAD)
           echo "Changed files:"
           echo "$CHANGED_FILES"
 
           SITE=$(echo "$CHANGED_FILES" | grep '^projects/sitewise/' | head -1 | cut -d'/' -f3)
           if [ -z "$SITE" ]; then
+            echo "::warning::Could not detect site from changes, defaulting to 'global'"
             SITE="global"
           fi
           echo "site=$SITE" >> "$GITHUB_OUTPUT"
           echo "Detected site: $SITE"
 
+      - name: Verify Terraform files exist
+        run: |
+          set -euo pipefail
+
+          SITE="${{ steps.site.outputs.site }}"
+          TF_DIR="projects/sitewise/$SITE"
+
+          if [ ! -d "$TF_DIR" ]; then
+            echo "::error::Terraform directory not found: $TF_DIR"
+            exit 1
+          fi
+
+          TF_FILES=$(find "$TF_DIR" -name '*.tf' -type f | wc -l)
+          if [ "$TF_FILES" -eq 0 ]; then
+            echo "::error::No .tf files found in $TF_DIR"
+            exit 1
+          fi
+
+          echo "✅ Found $TF_FILES Terraform file(s) in $TF_DIR"
+
       - name: Terraform Init (simulated)
         run: |
+          set -euo pipefail
+
           SITE="${{ steps.site.outputs.site }}"
           ENV="${{ steps.env.outputs.env }}"
           echo "============================================"
@@ -70,40 +104,71 @@ jobs:
           echo "  -backend-config=env/$ENV/backend.hcl"
           echo "  -chdir=projects/sitewise/$SITE"
           echo "============================================"
+          echo "Terraform has been successfully initialized!"
 
       - name: Terraform Plan (simulated)
+        id: plan
         run: |
+          set -euo pipefail
+
           SITE="${{ steps.site.outputs.site }}"
           ENV="${{ steps.env.outputs.env }}"
           echo "============================================"
-          echo "  terraform plan"
+          echo "  terraform plan -out=tfplan"
           echo "  -var-file=env/$ENV/env_common.tfvars"
           echo "  -chdir=projects/sitewise/$SITE"
           echo "============================================"
           echo ""
           echo "Plan: 3 to add, 0 to change, 0 to destroy."
 
+          # In production:
+          # terraform plan -detailed-exitcode -out=tfplan \
+          #   -var-file=../../env/$ENV/env_common.tfvars \
+          #   -chdir=projects/sitewise/$SITE
+          # Exit codes: 0=no changes, 1=error (fail job), 2=changes (continue)
+
       - name: Terraform Apply (simulated)
         run: |
+          set -euo pipefail
+
           SITE="${{ steps.site.outputs.site }}"
           ENV="${{ steps.env.outputs.env }}"
           echo "============================================"
           echo "  DEPLOYING SiteWise"
           echo "  Site: $SITE"
           echo "  Environment: $ENV"
+          echo "  Branch: ${{ github.ref_name }}"
+          echo "  Commit: ${{ github.sha }}"
           echo "============================================"
           echo ""
-          echo "  terraform apply -auto-approve"
-          echo "  -var-file=env/$ENV/env_common.tfvars"
-          echo "  -chdir=projects/sitewise/$SITE"
+          echo "  terraform apply -auto-approve tfplan"
           echo ""
           echo "Apply complete! Resources: 3 added, 0 changed, 0 destroyed."
+
+          # In production:
+          # terraform apply -auto-approve tfplan -chdir=projects/sitewise/$SITE
+          # If apply fails here, the job fails — promote jobs won't run
+
+      - name: Post deployment summary
+        if: always()
+        run: |
+          SITE="${{ steps.site.outputs.site }}"
+          ENV="${{ steps.env.outputs.env }}"
+
+          echo "## Deployment Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Site | $SITE |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | $ENV |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Branch | ${{ github.ref_name }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | ${{ job.status }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Commit | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
 
   promote-to-test:
     name: 'Promote to Test'
     needs: [deploy]
     runs-on: ubuntu-latest
-    if: github.ref_name == 'develop'
+    if: github.ref_name == 'develop' && needs.deploy.result == 'success'
 
     steps:
       - name: Generate GitHub App token
@@ -121,17 +186,21 @@ jobs:
 
       - name: Create release branch
         run: |
+          set -euo pipefail
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Detect site from latest changes
-          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git show --name-only --pretty="" HEAD)
-          SITE=$(echo "$CHANGED_FILES" | grep '^projects/sitewise/' | head -1 | cut -d'/' -f3)
-          [ -z "$SITE" ] && SITE="global"
-
+          SITE="${{ needs.deploy.outputs.site }}"
           RELEASE_BRANCH="release/${SITE}/v${{ github.run_number }}"
+
           git checkout -b "$RELEASE_BRANCH"
-          git push origin "$RELEASE_BRANCH"
+
+          if ! git push origin "$RELEASE_BRANCH"; then
+            echo "::error::Failed to create release branch: $RELEASE_BRANCH"
+            exit 1
+          fi
+
           echo "✅ Created release branch: $RELEASE_BRANCH"
           echo "   Deploy workflow will trigger for Test environment"
 
@@ -139,7 +208,7 @@ jobs:
     name: 'Promote to Prod'
     needs: [deploy]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref_name, 'release/')
+    if: startsWith(github.ref_name, 'release/') && needs.deploy.result == 'success'
 
     steps:
       - name: Generate GitHub App token
@@ -155,11 +224,16 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Merge to main
+      - name: Push to main
         run: |
+          set -euo pipefail
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Push release branch content to main
-          git push origin ${{ github.ref_name }}:main
+          if ! git push origin ${{ github.ref_name }}:main; then
+            echo "::error::Failed to push to main. Main may have diverged — manual intervention required."
+            exit 1
+          fi
+
           echo "✅ Pushed to main — Deploy workflow will trigger for Prod environment"
