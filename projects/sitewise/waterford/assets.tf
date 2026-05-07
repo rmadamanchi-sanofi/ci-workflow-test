@@ -6,3 +6,8 @@ resource "awscc_iotsitewise_asset" "waterford_packagingline1" {
   asset_name     = "waterford/PackagingLine1"
   asset_model_id = "" # TODO: reference deployed model ID
 }
+
+resource "awscc_iotsitewise_asset" "waterford_packagingline2" {
+  asset_name     = "waterford/PackagingLine2"
+  asset_model_id = "" # TODO: reference deployed model ID
+}
