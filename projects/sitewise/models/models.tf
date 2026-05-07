@@ -54,5 +54,12 @@ resource "awscc_iotsitewise_asset_model" "trayhandleredgetoplatform" {
         measurement = {}
       }
     },
+    {
+      name      = "EquipmentInfo/SerialNumber"
+      data_type = "STRING"
+      type = {
+        measurement = {}
+      }
+    },
   ]
 }
