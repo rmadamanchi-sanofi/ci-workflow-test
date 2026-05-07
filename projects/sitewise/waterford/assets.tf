@@ -26,3 +26,8 @@ resource "awscc_iotsitewise_asset" "waterford_fillingline5" {
   asset_name     = "waterford/FillingLine5"
   asset_model_id = "" # TODO: reference deployed model ID
 }
+
+resource "awscc_iotsitewise_asset" "waterford_fillingline6" {
+  asset_name     = "waterford/FillingLine6"
+  asset_model_id = "" # TODO: reference deployed model ID
+}
