@@ -52,7 +52,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ignition
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Detect change type and site
         id: detect
