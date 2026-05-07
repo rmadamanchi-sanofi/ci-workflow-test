@@ -96,10 +96,16 @@ jobs:
           TYPE="${{ steps.detect.outputs.type }}"
           SITE="${{ steps.detect.outputs.site }}"
 
+          # Use the actual changed file from the diff, not a blind find
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+
           if [ "$TYPE" = "models" ]; then
-            INPUT_FILE=$(find "models" -name '*.json' -type f | head -1)
+            INPUT_FILE=$(echo "$CHANGED_FILES" | grep '^models/.*\.json$' | head -1)
+            # Fallback to find if diff doesn't show a JSON (e.g., first run)
+            [ -z "$INPUT_FILE" ] && INPUT_FILE=$(find "models" -name '*.json' -type f | head -1)
           else
-            INPUT_FILE=$(find "assets/$SITE" -name '*.json' -type f | head -1)
+            INPUT_FILE=$(echo "$CHANGED_FILES" | grep "^assets/$SITE/.*\.json$" | head -1)
+            [ -z "$INPUT_FILE" ] && INPUT_FILE=$(find "assets/$SITE" -name '*.json' -type f | head -1)
           fi
 
           if [ -z "$INPUT_FILE" ]; then
