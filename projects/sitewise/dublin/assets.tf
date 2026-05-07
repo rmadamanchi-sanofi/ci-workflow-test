@@ -2,22 +2,12 @@
 # Do not edit manually — changes will be overwritten
 # Site: dublin
 
-resource "awscc_iotsitewise_asset" "dublin_packagingline1" {
-  asset_name     = "dublin/PackagingLine1"
+resource "awscc_iotsitewise_asset" "dublin_fillingmachine1" {
+  asset_name     = "dublin/FillingMachine1"
   asset_model_id = "" # TODO: reference deployed model ID
 }
 
-resource "awscc_iotsitewise_asset" "dublin_packagingline2" {
-  asset_name     = "dublin/PackagingLine2"
-  asset_model_id = "" # TODO: reference deployed model ID
-}
-
-resource "awscc_iotsitewise_asset" "dublin_packagingline3" {
-  asset_name     = "dublin/PackagingLine3"
-  asset_model_id = "" # TODO: reference deployed model ID
-}
-
-resource "awscc_iotsitewise_asset" "dublin_packagingline4" {
-  asset_name     = "dublin/PackagingLine4"
+resource "awscc_iotsitewise_asset" "dublin_fillingmachine2" {
+  asset_name     = "dublin/FillingMachine2"
   asset_model_id = "" # TODO: reference deployed model ID
 }
