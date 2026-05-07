@@ -41,7 +41,21 @@ resource "awscc_iotsitewise_asset_model" "trayhandleredgetoplatform" {
       }
     },
     {
+      name      = "EquipmentInfo/FirmwareVersion"
+      data_type = "STRING"
+      type = {
+        measurement = {}
+      }
+    },
+    {
       name      = "EquipmentInfo/InstallDate"
+      data_type = "STRING"
+      type = {
+        measurement = {}
+      }
+    },
+    {
+      name      = "EquipmentInfo/LastMaintenanceDate"
       data_type = "STRING"
       type = {
         measurement = {}
@@ -63,6 +77,13 @@ resource "awscc_iotsitewise_asset_model" "trayhandleredgetoplatform" {
     },
     {
       name      = "EquipmentInfo/SerialNumber"
+      data_type = "STRING"
+      type = {
+        measurement = {}
+      }
+    },
+    {
+      name      = "EquipmentInfo/WarrantyExpiry"
       data_type = "STRING"
       type = {
         measurement = {}
