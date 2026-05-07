@@ -59,7 +59,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+          # Compare against the state before this push (handles multi-commit pushes)
+          BEFORE="${{ github.event.before }}"
+          if [[ "$BEFORE" =~ ^0+$ ]]; then
+            # First push to branch — compare against parent
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+          else
+            CHANGED_FILES=$(git diff --name-only "$BEFORE" HEAD)
+          fi
+
           echo "Changed files:"
           echo "$CHANGED_FILES"
 
