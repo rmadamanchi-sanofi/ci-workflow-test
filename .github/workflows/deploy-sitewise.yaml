@@ -121,11 +121,21 @@ jobs:
           echo ""
           echo "Plan: 3 to add, 0 to change, 0 to destroy."
 
+          # Post plan to step summary so reviewers can see it before approving
+          echo "## Terraform Plan — $SITE ($ENV)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "Plan: 3 to add, 0 to change, 0 to destroy." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "  + awscc_iotsitewise_asset_model.trayhandleredgetoplatform" >> "$GITHUB_STEP_SUMMARY"
+          echo "  + awscc_iotsitewise_asset_model.trayhandleredgetoplatform (properties)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
           # In production:
           # terraform plan -detailed-exitcode -out=tfplan \
           #   -var-file=../../env/$ENV/env_common.tfvars \
-          #   -chdir=projects/sitewise/$SITE
-          # Exit codes: 0=no changes, 1=error (fail job), 2=changes (continue)
+          #   -chdir=projects/sitewise/$SITE | tee plan_output.txt
+          # cat plan_output.txt >> "$GITHUB_STEP_SUMMARY"
 
       - name: Terraform Apply (simulated)
         run: |
