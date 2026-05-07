@@ -1,6 +1,16 @@
 {
-  "name": "Waterford_PackagingLine1",
-  "tagType": "asset",
-  "description": "Packaging Line 1 at Waterford site",
-  "modelName": "Packaging_Line_UDT"
+  "name": "Waterford",
+  "tagType": "Folder",
+  "tags": [
+    {
+      "name": "PackagingLine1",
+      "tagType": "UdtInstance",
+      "typeId": "Packaging_Line_UDT"
+    },
+    {
+      "name": "PackagingLine2",
+      "tagType": "UdtInstance",
+      "typeId": "Packaging_Line_UDT"
+    }
+  ]
 }
