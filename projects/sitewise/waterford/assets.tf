@@ -2,8 +2,8 @@
 # Do not edit manually — changes will be overwritten
 # Site: waterford
 
-resource "awscc_iotsitewise_asset" "waterford_packagingline1" {
-  asset_name     = "waterford/PackagingLine1"
+resource "awscc_iotsitewise_asset" "waterford_packagingline3" {
+  asset_name     = "waterford/PackagingLine3"
   asset_model_id = "" # TODO: reference deployed model ID
 }
 
