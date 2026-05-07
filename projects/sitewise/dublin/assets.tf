@@ -11,3 +11,8 @@ resource "awscc_iotsitewise_asset" "dublin_packagingline2" {
   asset_name     = "dublin/PackagingLine2"
   asset_model_id = "" # TODO: reference deployed model ID
 }
+
+resource "awscc_iotsitewise_asset" "dublin_packagingline3" {
+  asset_name     = "dublin/PackagingLine3"
+  asset_model_id = "" # TODO: reference deployed model ID
+}
