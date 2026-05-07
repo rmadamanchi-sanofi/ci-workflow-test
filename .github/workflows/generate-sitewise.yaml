@@ -2,11 +2,12 @@ name: 'Generate SiteWise Terraform'
 run-name: 'Generate SiteWise — ${{ github.ref_name }}'
 
 on:
-  push:
-    branches: [ignition]
-    paths:
-      - "models/**"
-      - "assets/**"
+  workflow_dispatch: {}
+  # push:
+  #   branches: [ignition]
+  #   paths:
+  #     - "models/**"
+  #     - "assets/**"
 
 concurrency:
   group: generate-sitewise-${{ github.ref_name }}

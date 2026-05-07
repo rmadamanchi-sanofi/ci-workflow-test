@@ -2,11 +2,12 @@ name: 'Deploy SiteWise'
 run-name: 'Deploy SiteWise — ${{ github.ref_name }}'
 
 on:
-  push:
-    branches:
-      - develop
-      - main
-      - "release/**"
+  workflow_dispatch: {}
+  # push:
+  #   branches:
+  #     - develop
+  #     - main
+  #     - "release/**"
 
 concurrency:
   group: deploy-sitewise-${{ github.ref_name }}

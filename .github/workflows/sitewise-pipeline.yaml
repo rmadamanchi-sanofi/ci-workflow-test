@@ -12,16 +12,21 @@ run-name: 'SiteWise Pipeline — ${{ github.ref_name }}'
 #       paths: ["models/**", "assets/**"]
 
 on:
-  workflow_dispatch:
-    inputs:
-      trigger_type:
-        description: 'Simulate change type'
-        required: true
-        default: 'models'
-        type: choice
-        options:
-          - models
-          - assets
+  push:
+    branches: [ignition]
+    paths:
+      - "models/**"
+      - "assets/**"
+  # workflow_dispatch:
+  #   inputs:
+  #     trigger_type:
+  #       description: 'Simulate change type'
+  #       required: true
+  #       default: 'models'
+  #       type: choice
+  #       options:
+  #         - models
+  #         - assets
 
 concurrency:
   group: sitewise-pipeline-${{ github.ref_name }}
@@ -54,31 +59,19 @@ jobs:
         run: |
           set -euo pipefail
 
-          # For workflow_dispatch, use input; for push events, detect from diff
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TYPE="${{ inputs.trigger_type }}"
-            if [ "$TYPE" = "models" ]; then
-              SITE="global"
-            else
-              # Find first site with JSON files
-              SITE=$(find assets -mindepth 1 -maxdepth 1 -type d | head -1 | xargs basename)
-              [ -z "$SITE" ] && SITE="waterford"
-            fi
-          else
-            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
-            echo "Changed files:"
-            echo "$CHANGED_FILES"
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
 
-            TYPE=""
-            SITE=""
+          TYPE=""
+          SITE=""
 
-            if echo "$CHANGED_FILES" | grep -q '^models/'; then
-              TYPE="models"
-              SITE="global"
-            elif echo "$CHANGED_FILES" | grep -q '^assets/'; then
-              TYPE="assets"
-              SITE=$(echo "$CHANGED_FILES" | grep '^assets/' | head -1 | cut -d'/' -f2)
-            fi
+          if echo "$CHANGED_FILES" | grep -q '^models/'; then
+            TYPE="models"
+            SITE="global"
+          elif echo "$CHANGED_FILES" | grep -q '^assets/'; then
+            TYPE="assets"
+            SITE=$(echo "$CHANGED_FILES" | grep '^assets/' | head -1 | cut -d'/' -f2)
           fi
 
           if [ -z "$TYPE" ]; then
