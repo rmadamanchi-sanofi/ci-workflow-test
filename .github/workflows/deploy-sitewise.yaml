@@ -101,8 +101,8 @@ jobs:
           echo ""
           echo "Apply complete! Resources: 3 added, 0 changed, 0 destroyed."
 
-  promote:
-    name: 'Promote to next environment'
+  promote-to-test:
+    name: 'Promote to Test'
     needs: [deploy]
     runs-on: ubuntu-latest
     if: github.ref_name == 'develop'
@@ -136,3 +136,32 @@ jobs:
           git push origin "$RELEASE_BRANCH"
           echo "✅ Created release branch: $RELEASE_BRANCH"
           echo "   Deploy workflow will trigger for Test environment"
+
+  promote-to-prod:
+    name: 'Promote to Prod'
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref_name, 'release/')
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Merge to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Push release branch content to main
+          git push origin ${{ github.ref_name }}:main
+          echo "✅ Pushed to main — Deploy workflow will trigger for Prod environment"
