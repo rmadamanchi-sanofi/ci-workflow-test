@@ -7,8 +7,6 @@ on:
       - develop
       - main
       - "release/**"
-    paths:
-      - "projects/sitewise/**"
 
 permissions:
   contents: write
