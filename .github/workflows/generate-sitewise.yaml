@@ -1,0 +1,170 @@
+name: 'Generate SiteWise Terraform'
+run-name: 'Generate SiteWise — ${{ github.ref_name }}'
+
+on:
+  push:
+    branches: [ignition]
+    paths:
+      - "models/**"
+      - "assets/**"
+
+concurrency:
+  group: generate-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    name: 'Validate & Generate'
+    runs-on: ubuntu-latest
+    outputs:
+      site: ${{ steps.detect.outputs.site }}
+      type: ${{ steps.detect.outputs.type }}
+      has_changes: ${{ steps.commit.outputs.has_changes }}
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout ignition branch
+        uses: actions/checkout@v4
+        with:
+          ref: ignition
+          fetch-depth: 2
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Detect change type and site
+        id: detect
+        run: |
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          TYPE=""
+          SITE=""
+
+          if echo "$CHANGED_FILES" | grep -q '^models/'; then
+            TYPE="models"
+            SITE="global"
+          elif echo "$CHANGED_FILES" | grep -q '^assets/'; then
+            TYPE="assets"
+            SITE=$(echo "$CHANGED_FILES" | grep '^assets/' | head -1 | cut -d'/' -f2)
+          fi
+
+          if [ -z "$TYPE" ]; then
+            echo "::error::Could not detect change type from modified files"
+            exit 1
+          fi
+
+          if [ -z "$SITE" ]; then
+            echo "::error::Could not detect site from modified files"
+            exit 1
+          fi
+
+          echo "type=$TYPE" >> "$GITHUB_OUTPUT"
+          echo "site=$SITE" >> "$GITHUB_OUTPUT"
+          echo "Detected — type: $TYPE, site: $SITE"
+
+      - name: Validate JSON input
+        run: |
+          TYPE="${{ steps.detect.outputs.type }}"
+          SITE="${{ steps.detect.outputs.site }}"
+
+          if [ "$TYPE" = "models" ]; then
+            INPUT_FILE=$(find "models" -name '*.json' -type f | head -1)
+          else
+            INPUT_FILE=$(find "assets/$SITE" -name '*.json' -type f | head -1)
+          fi
+
+          if [ -z "$INPUT_FILE" ]; then
+            echo "::error::No JSON file found for $TYPE/$SITE"
+            exit 1
+          fi
+
+          echo "input_file=$INPUT_FILE" >> "$GITHUB_OUTPUT"
+
+          # Validate JSON is parseable
+          if ! python3 -c "import json; json.load(open('$INPUT_FILE'))"; then
+            echo "::error::Invalid JSON syntax in $INPUT_FILE"
+            exit 1
+          fi
+
+          echo "✅ JSON validation passed: $INPUT_FILE"
+        id: validate
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run generator script
+        run: |
+          TYPE="${{ steps.detect.outputs.type }}"
+          SITE="${{ steps.detect.outputs.site }}"
+          INPUT_FILE="${{ steps.validate.outputs.input_file }}"
+
+          if [ "$TYPE" = "models" ]; then
+            OUTPUT_DIR="projects/sitewise/models"
+            OUTPUT_FILE="$OUTPUT_DIR/models.tf"
+          else
+            OUTPUT_DIR="projects/sitewise/$SITE"
+            OUTPUT_FILE="$OUTPUT_DIR/assets.tf"
+          fi
+
+          mkdir -p "$OUTPUT_DIR"
+
+          python scripts/generate_sitewise_tf.py \
+            --input "$INPUT_FILE" \
+            --output "$OUTPUT_FILE" \
+            --site "$SITE" \
+            --type "$TYPE"
+
+      - name: Validate generated Terraform
+        run: |
+          TYPE="${{ steps.detect.outputs.type }}"
+          SITE="${{ steps.detect.outputs.site }}"
+
+          if [ "$TYPE" = "models" ]; then
+            TF_DIR="projects/sitewise/models"
+          else
+            TF_DIR="projects/sitewise/$SITE"
+          fi
+
+          # Check terraform fmt
+          if command -v terraform &> /dev/null; then
+            terraform fmt -check -diff "$TF_DIR" || echo "::warning::Terraform fmt issues detected"
+          fi
+
+          echo "✅ Generated Terraform files:"
+          find "$TF_DIR" -name '*.tf' -exec echo "  {}" \;
+
+      - name: Commit generated files
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add projects/sitewise/
+          if git diff --cached --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No changes to commit"
+          else
+            git commit -m "chore: auto-generate Terraform for ${{ steps.detect.outputs.type }}/${{ steps.detect.outputs.site }}"
+            git push
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Committed and pushed generated files"
+          fi
+
+      - name: Merge to develop
+        if: steps.commit.outputs.has_changes == 'true'
+        run: |
+          # Push current ignition HEAD to develop (fast-forward or force update)
+          # This is safe because develop has no independent changes — it only receives from ignition
+          git push origin ignition:develop
+          echo "✅ Pushed to develop — deploy workflow will trigger"

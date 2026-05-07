@@ -1,0 +1,13 @@
+# Models — central Ignition team
+models/**                          @rmadamanchi-sanofi
+projects/sitewise/models/**        @rmadamanchi-sanofi
+
+# Assets — per-site teams
+assets/waterford/**                @rmadamanchi-sanofi
+assets/dublin/**                   @rmadamanchi-sanofi
+projects/sitewise/waterford/**     @rmadamanchi-sanofi
+projects/sitewise/dublin/**        @rmadamanchi-sanofi
+
+# Platform — workflows and scripts
+.github/**                         @rmadamanchi-sanofi
+scripts/**                         @rmadamanchi-sanofi

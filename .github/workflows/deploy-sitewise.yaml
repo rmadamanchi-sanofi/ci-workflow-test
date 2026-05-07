@@ -1,0 +1,138 @@
+name: 'Deploy SiteWise'
+run-name: 'Deploy SiteWise — ${{ github.ref_name }}'
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - "release/**"
+    paths:
+      - "projects/sitewise/**"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  deploy:
+    name: 'Terraform Deploy'
+    runs-on: ubuntu-latest
+    environment: ${{ (
+        (github.ref_name == 'develop') && 'dev'
+      ) || (
+        startsWith(github.ref_name, 'release/') && 'test'
+      ) || (
+        (github.ref_name == 'main') && 'prod'
+      ) || 'dev' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine environment
+        id: env
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          if [ "$BRANCH" = "develop" ]; then
+            ENV="dev"
+          elif [[ "$BRANCH" == release/* ]]; then
+            ENV="test"
+          elif [ "$BRANCH" = "main" ]; then
+            ENV="prod"
+          else
+            echo "::error::Unknown branch for deployment: $BRANCH"
+            exit 1
+          fi
+          echo "env=$ENV" >> "$GITHUB_OUTPUT"
+          echo "Deploying to: $ENV (branch: $BRANCH)"
+
+      - name: Detect site from changes
+        id: site
+        run: |
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git show --name-only --pretty="" HEAD)
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          SITE=$(echo "$CHANGED_FILES" | grep '^projects/sitewise/' | head -1 | cut -d'/' -f3)
+          if [ -z "$SITE" ]; then
+            SITE="global"
+          fi
+          echo "site=$SITE" >> "$GITHUB_OUTPUT"
+          echo "Detected site: $SITE"
+
+      - name: Terraform Init (simulated)
+        run: |
+          SITE="${{ steps.site.outputs.site }}"
+          ENV="${{ steps.env.outputs.env }}"
+          echo "============================================"
+          echo "  terraform init"
+          echo "  -backend-config=env/$ENV/backend.hcl"
+          echo "  -chdir=projects/sitewise/$SITE"
+          echo "============================================"
+
+      - name: Terraform Plan (simulated)
+        run: |
+          SITE="${{ steps.site.outputs.site }}"
+          ENV="${{ steps.env.outputs.env }}"
+          echo "============================================"
+          echo "  terraform plan"
+          echo "  -var-file=env/$ENV/env_common.tfvars"
+          echo "  -chdir=projects/sitewise/$SITE"
+          echo "============================================"
+          echo ""
+          echo "Plan: 3 to add, 0 to change, 0 to destroy."
+
+      - name: Terraform Apply (simulated)
+        run: |
+          SITE="${{ steps.site.outputs.site }}"
+          ENV="${{ steps.env.outputs.env }}"
+          echo "============================================"
+          echo "  DEPLOYING SiteWise"
+          echo "  Site: $SITE"
+          echo "  Environment: $ENV"
+          echo "============================================"
+          echo ""
+          echo "  terraform apply -auto-approve"
+          echo "  -var-file=env/$ENV/env_common.tfvars"
+          echo "  -chdir=projects/sitewise/$SITE"
+          echo ""
+          echo "Apply complete! Resources: 3 added, 0 changed, 0 destroyed."
+
+  promote:
+    name: 'Promote to next environment'
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    if: github.ref_name == 'develop'
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Create release branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Detect site from latest changes
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git show --name-only --pretty="" HEAD)
+          SITE=$(echo "$CHANGED_FILES" | grep '^projects/sitewise/' | head -1 | cut -d'/' -f3)
+          [ -z "$SITE" ] && SITE="global"
+
+          RELEASE_BRANCH="release/${SITE}/v${{ github.run_number }}"
+          git checkout -b "$RELEASE_BRANCH"
+          git push origin "$RELEASE_BRANCH"
+          echo "✅ Created release branch: $RELEASE_BRANCH"
+          echo "   Deploy workflow will trigger for Test environment"

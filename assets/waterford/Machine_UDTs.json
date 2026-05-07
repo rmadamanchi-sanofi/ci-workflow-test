@@ -1,0 +1,36 @@
+{
+  "name": "SanofiLibrary",
+  "tagType": "Folder",
+  "tags": [
+    {
+      "name": "TrayHandlerEdgeToPlatform",
+      "tagType": "UdtType",
+      "tags": [
+        {
+          "name": "EdgeData",
+          "tagType": "Folder",
+          "tags": [
+            {
+              "name": "ProductionData",
+              "tagType": "Folder",
+              "tags": [
+                { "name": "GoodPartsCounter", "tagType": "AtomicTag", "dataType": "Int4" },
+                { "name": "OperationMode", "tagType": "AtomicTag", "dataType": "Int4" },
+                { "name": "RejectedPartsCounter", "tagType": "AtomicTag", "dataType": "Int4" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "EquipmentInfo",
+          "tagType": "Folder",
+          "tags": [
+            { "name": "Description", "tagType": "AtomicTag", "dataType": "String" },
+            { "name": "MachineCode", "tagType": "AtomicTag", "dataType": "String" },
+            { "name": "Manufacturer", "tagType": "AtomicTag", "dataType": "String" }
+          ]
+        }
+      ]
+    }
+  ]
+}
