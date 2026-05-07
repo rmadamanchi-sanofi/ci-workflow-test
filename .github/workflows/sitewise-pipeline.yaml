@@ -217,7 +217,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          if ! git push origin ignition:develop; then
+          if ! git push origin ignition:develop --force; then
             echo "::error::Failed to push to develop branch"
             exit 1
           fi
@@ -373,7 +373,7 @@ jobs:
           SITE="${{ needs.generate.outputs.site }}"
           RELEASE_BRANCH="release/${SITE}/v${{ github.run_number }}"
 
-          if ! git push origin "${RELEASE_BRANCH}:main"; then
+          if ! git push origin "${RELEASE_BRANCH}:main" --force; then
             echo "::error::Failed to push to main"
             exit 1
           fi
