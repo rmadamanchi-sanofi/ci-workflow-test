@@ -1,12 +1,20 @@
-# Models — central Ignition team
-models/**                          @rmadamanchi-sanofi
+# Models — central Ignition team (Patricia)
+UDT [Models]/**                    @rmadamanchi-sanofi
 projects/sitewise/models/**        @rmadamanchi-sanofi
 
 # Assets — per-site teams
-assets/waterford/**                @rmadamanchi-sanofi
-assets/dublin/**                   @rmadamanchi-sanofi
-projects/sitewise/waterford/**     @rmadamanchi-sanofi
-projects/sitewise/dublin/**        @rmadamanchi-sanofi
+Sites/WAT/**                       @rmadamanchi-sanofi
+Sites/TOR/**                       @rmadamanchi-sanofi
+Sites/LET/**                       @rmadamanchi-sanofi
+Sites/VAL/**                       @rmadamanchi-sanofi
+projects/sitewise/WAT/**           @rmadamanchi-sanofi
+projects/sitewise/TOR/**           @rmadamanchi-sanofi
+projects/sitewise/LET/**           @rmadamanchi-sanofi
+projects/sitewise/VAL/**           @rmadamanchi-sanofi
+
+# Core/shared assets
+Sites/Core/**                      @rmadamanchi-sanofi
+projects/sitewise/Core/**          @rmadamanchi-sanofi
 
 # Platform — workflows and scripts
 .github/**                         @rmadamanchi-sanofi

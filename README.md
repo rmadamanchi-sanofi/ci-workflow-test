@@ -5,29 +5,54 @@ Automated pipeline for deploying SiteWise models and assets from Ignition JSON d
 ## Architecture
 
 ```
-ignition branch → develop → release/{site}/v{x} → main
-   (upload)        (Dev)        (Test)              (Prod)
+ignition branch (push) → generate TF → deploy to Dev (auto)
+                       → create PR (release/{site}/vN → main)
+                       → reviewer approves PR → deploy to Test
+                       → merge PR → deploy to Prod
 ```
+
+## Workflows
+
+| File | Trigger | Does |
+|------|---------|------|
+| `generate-and-deploy-dev.yaml` | push to `ignition` | Validate JSON → Generate TF → Push to develop → Deploy Dev → Create release PR |
+| `deploy-sitewise.yaml` | push to `release/**` or `main` | Deploy to Test/Prod, post plan to PR |
 
 ## Folder Structure
 
 ```
-models/                    ← Ignition UDT JSON files (central team)
-assets/
-  waterford/               ← Per-site asset JSON files
-  dublin/
+UDT [Models]/                  ← Ignition UDT JSON files (central team)
+  UDTs.json
+Sites/
+  Core/UNS/tags.json           ← Shared/global asset definitions
+  {SITE}/
+    Pre-Prod/UNS [Assets]/     ← Per-site asset JSON files
+    Prod/UNS [Assets]/
 scripts/
-  generate_sitewise_tf.py  ← Generator script
-projects/sitewise/         ← Auto-generated Terraform output
+  generate_sitewise_tf.py      ← Generator script (JSON → Terraform)
+projects/sitewise/             ← Auto-generated Terraform output
   models/
-  waterford/
-  dublin/
+  {SITE}/
 ```
 
-## Workflow
+## Sites
 
-1. Ignition pushes JSON to `ignition` branch
-2. Generate workflow validates, generates Terraform, merges to `develop`
-3. Deploy workflow triggers on `develop` → deploys to Dev (auto)
-4. Release branch auto-created → deploys to Test (manual approval)
-5. Merge to `main` → deploys to Prod (manual approval)
+| Code | Name |
+|------|------|
+| WAT | Waterford |
+| TOR | Toronto |
+| LET | Lentilly |
+| VAL | Valence |
+| Core | Shared/Global |
+
+## Approval Flow
+
+- **Dev**: automatic (no approval needed)
+- **Test**: PR review required (CODEOWNERS-based reviewers)
+- **Prod**: PR merge to main required (CODEOWNERS-based reviewers)
+
+## Requirements
+
+- GitHub App (`sitewise-ci-bot`) for automated push from ignition → develop
+- GitHub Environments: `dev`, `test`, `prod`
+- Branch protection on `main` and `release/**`

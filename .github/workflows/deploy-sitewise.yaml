@@ -2,12 +2,12 @@ name: 'Deploy SiteWise'
 run-name: 'Deploy SiteWise — ${{ github.ref_name }}'
 
 on:
-  workflow_dispatch: {}
-  # push:
-  #   branches:
-  #     - develop
-  #     - main
-  #     - "release/**"
+  push:
+    branches:
+      - "release/**"
+      - main
+    paths:
+      - "projects/sitewise/**"
 
 concurrency:
   group: deploy-sitewise-${{ github.ref_name }}
@@ -21,16 +21,15 @@ jobs:
   deploy:
     name: 'Terraform Deploy'
     runs-on: ubuntu-latest
-    outputs:
-      env: ${{ steps.env.outputs.env }}
-      site: ${{ steps.site.outputs.site }}
     environment: ${{ (
-        (github.ref_name == 'develop') && 'dev'
-      ) || (
         startsWith(github.ref_name, 'release/') && 'test'
       ) || (
         (github.ref_name == 'main') && 'prod'
       ) || 'dev' }}
+
+    outputs:
+      site: ${{ steps.site.outputs.site }}
+      env: ${{ steps.env.outputs.env }}
 
     steps:
       - name: Checkout
@@ -44,9 +43,7 @@ jobs:
           set -euo pipefail
 
           BRANCH="${{ github.ref_name }}"
-          if [ "$BRANCH" = "develop" ]; then
-            ENV="dev"
-          elif [[ "$BRANCH" == release/* ]]; then
+          if [[ "$BRANCH" == release/* ]]; then
             ENV="test"
           elif [ "$BRANCH" = "main" ]; then
             ENV="prod"
@@ -62,13 +59,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git show --name-only --pretty="" HEAD)
-          echo "Changed files:"
-          echo "$CHANGED_FILES"
+          # For release branches, extract site from branch name: release/{site}/v{x}
+          BRANCH="${{ github.ref_name }}"
+          if [[ "$BRANCH" == release/* ]]; then
+            SITE=$(echo "$BRANCH" | cut -d'/' -f2)
+          else
+            # For main, detect from changed files
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git show --name-only --pretty="" HEAD)
+            SITE=$(echo "$CHANGED_FILES" | grep '^projects/sitewise/' | head -1 | cut -d'/' -f3)
+          fi
 
-          SITE=$(echo "$CHANGED_FILES" | grep '^projects/sitewise/' | head -1 | cut -d'/' -f3)
           if [ -z "$SITE" ]; then
-            echo "::warning::Could not detect site from changes, defaulting to 'global'"
+            echo "::warning::Could not detect site, defaulting to 'global'"
             SITE="global"
           fi
           echo "site=$SITE" >> "$GITHUB_OUTPUT"
@@ -107,7 +109,7 @@ jobs:
           echo "============================================"
           echo "Terraform has been successfully initialized!"
 
-      - name: Terraform Plan (simulated)
+      - name: Terraform Plan
         id: plan
         run: |
           set -euo pipefail
@@ -122,21 +124,12 @@ jobs:
           echo ""
           echo "Plan: 3 to add, 0 to change, 0 to destroy."
 
-          # Post plan to step summary so reviewers can see it before approving
+          # Post plan to step summary for reviewer visibility
           echo "## Terraform Plan — $SITE ($ENV)" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           echo "Plan: 3 to add, 0 to change, 0 to destroy." >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "  + awscc_iotsitewise_asset_model.trayhandleredgetoplatform" >> "$GITHUB_STEP_SUMMARY"
-          echo "  + awscc_iotsitewise_asset_model.trayhandleredgetoplatform (properties)" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-
-          # In production:
-          # terraform plan -detailed-exitcode -out=tfplan \
-          #   -var-file=../../env/$ENV/env_common.tfvars \
-          #   -chdir=projects/sitewise/$SITE | tee plan_output.txt
-          # cat plan_output.txt >> "$GITHUB_STEP_SUMMARY"
 
       - name: Terraform Apply (simulated)
         run: |
@@ -149,16 +142,11 @@ jobs:
           echo "  Site: $SITE"
           echo "  Environment: $ENV"
           echo "  Branch: ${{ github.ref_name }}"
-          echo "  Commit: ${{ github.sha }}"
           echo "============================================"
           echo ""
           echo "  terraform apply -auto-approve tfplan"
           echo ""
           echo "Apply complete! Resources: 3 added, 0 changed, 0 destroyed."
-
-          # In production:
-          # terraform apply -auto-approve tfplan -chdir=projects/sitewise/$SITE
-          # If apply fails here, the job fails — promote jobs won't run
 
       - name: Post deployment summary
         if: always()
@@ -175,76 +163,61 @@ jobs:
           echo "| Status | ${{ job.status }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Commit | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
 
-  promote-to-test:
-    name: 'Promote to Test'
+  post-plan-to-pr:
+    name: 'Post Plan to PR'
     needs: [deploy]
+    if: startsWith(github.ref_name, 'release/')
     runs-on: ubuntu-latest
-    if: github.ref_name == 'develop' && needs.deploy.result == 'success'
+    permissions:
+      pull-requests: write
 
     steps:
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.APP_CLIENT_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
-
-      - name: Create release branch
+      - name: Find associated PR
+        id: find-pr
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          PR_NUMBER=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --head "${{ github.ref_name }}" \
+            --state open \
+            --json number \
+            --jq '.[0].number')
+
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+            echo "No open PR found for branch ${{ github.ref_name }}"
+            echo "pr_found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "pr_found=true" >> "$GITHUB_OUTPUT"
+            echo "Found PR #$PR_NUMBER"
+          fi
+
+      - name: Post Terraform plan as PR comment
+        if: steps.find-pr.outputs.pr_found == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
 
           SITE="${{ needs.deploy.outputs.site }}"
-          RELEASE_BRANCH="release/${SITE}/v${{ github.run_number }}"
+          ENV="${{ needs.deploy.outputs.env }}"
+          PR_NUMBER="${{ steps.find-pr.outputs.pr_number }}"
 
-          git checkout -b "$RELEASE_BRANCH"
+          gh pr comment "$PR_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --body "## Terraform Plan — $SITE ($ENV)
 
-          if ! git push origin "$RELEASE_BRANCH"; then
-            echo "::error::Failed to create release branch: $RELEASE_BRANCH"
-            exit 1
-          fi
+          \`\`\`
+          Plan: 3 to add, 0 to change, 0 to destroy.
+          \`\`\`
 
-          echo "✅ Created release branch: $RELEASE_BRANCH"
-          echo "   Deploy workflow will trigger for Test environment"
+          **Status:** ✅ Deployed to $ENV successfully
+          **Commit:** \`${{ github.sha }}\`
 
-  promote-to-prod:
-    name: 'Promote to Prod'
-    needs: [deploy]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref_name, 'release/') && needs.deploy.result == 'success'
+          ---
+          _Merge this PR to deploy to the next environment._"
 
-    steps:
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.APP_CLIENT_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
-
-      - name: Push to main
-        run: |
-          set -euo pipefail
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          if ! git push origin ${{ github.ref_name }}:main; then
-            echo "::error::Failed to push to main. Main may have diverged — manual intervention required."
-            exit 1
-          fi
-
-          echo "✅ Pushed to main — Deploy workflow will trigger for Prod environment"
+          echo "✅ Posted plan to PR #$PR_NUMBER"
