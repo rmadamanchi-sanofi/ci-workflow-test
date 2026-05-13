@@ -71,18 +71,21 @@ jobs:
 
           TYPE="${{ steps.detect.outputs.type }}"
           SITE="${{ steps.detect.outputs.site }}"
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
 
           if [ "$TYPE" = "models" ]; then
-            INPUT_FILE=$(find . -path '*/UDT*' -name '*.json' -type f | head -1)
+            INPUT_FILE=$(echo "$CHANGED_FILES" | grep -i '^UDT' | grep '\.json$' | head -1)
           else
-            INPUT_FILE=$(find "Sites/$SITE" -name '*.json' -type f | head -1)
-            if [ -z "$INPUT_FILE" ]; then
-              INPUT_FILE=$(find "Sites/Core" -name '*.json' -type f | head -1)
-            fi
+            INPUT_FILE=$(echo "$CHANGED_FILES" | grep '^Sites/' | grep '\.json$' | head -1)
           fi
 
           if [ -z "$INPUT_FILE" ]; then
-            echo "::error::No JSON file found for $TYPE/$SITE"
+            echo "::error::No changed JSON file found for $TYPE/$SITE"
+            exit 1
+          fi
+
+          if [ ! -f "$INPUT_FILE" ]; then
+            echo "::error::Changed file not found on disk: $INPUT_FILE"
             exit 1
           fi
 
