@@ -1,0 +1,65 @@
+{
+  "name": "MixingLibrary",
+  "tagType": "Folder",
+  "tags": [
+    {
+      "name": "MixingEdgeToPlatform",
+      "tagType": "UdtType",
+      "tags": [
+        {
+          "name": "EdgeData",
+          "tagType": "Folder",
+          "tags": [
+            {
+              "name": "ProcessValues",
+              "tagType": "Folder",
+              "tags": [
+                {
+                  "name": "RotationSpeed",
+                  "tagType": "AtomicTag",
+                  "dataType": "Float4"
+                },
+                {
+                  "name": "Temperature",
+                  "tagType": "AtomicTag",
+                  "dataType": "Float4"
+                },
+                {
+                  "name": "Pressure",
+                  "tagType": "AtomicTag",
+                  "dataType": "Float4"
+                },
+                {
+                  "name": "BatchCount",
+                  "tagType": "AtomicTag",
+                  "dataType": "Int4"
+                },
+                {
+                  "name": "Vibration",
+                  "tagType": "AtomicTag",
+                  "dataType": "Float8"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "EquipmentInfo",
+          "tagType": "Folder",
+          "tags": [
+            {
+              "name": "Manufacturer",
+              "tagType": "AtomicTag",
+              "dataType": "String"
+            },
+            {
+              "name": "MachineCode",
+              "tagType": "AtomicTag",
+              "dataType": "String"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
