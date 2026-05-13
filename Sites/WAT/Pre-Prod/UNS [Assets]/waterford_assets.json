@@ -1,0 +1,92 @@
+{
+  "name": "UNS",
+  "tagType": "Folder",
+  "tags": [
+    {
+      "name": "Sanofi",
+      "tagType": "Folder",
+      "tags": [
+        {
+          "name": "Waterford",
+          "tagType": "Folder",
+          "tags": [
+            {
+              "name": "MABS",
+              "tagType": "Folder",
+              "tags": [
+                {
+                  "name": "MixingUnit001",
+                  "tagType": "UdtInstance",
+                  "typeId": "MixingEdgeToPlatform",
+                  "tags": [
+                    {
+                      "name": "EdgeData",
+                      "tagType": "Folder",
+                      "tags": [
+                        {
+                          "name": "ProcessValues",
+                          "tagType": "Folder",
+                          "tags": [
+                            {
+                              "name": "RotationSpeed",
+                              "tagType": "AtomicTag",
+                              "dataType": "Float4"
+                            },
+                            {
+                              "name": "Temperature",
+                              "tagType": "AtomicTag",
+                              "dataType": "Float4"
+                            },
+                            {
+                              "name": "Pressure",
+                              "tagType": "AtomicTag",
+                              "dataType": "Float4"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "name": "FillingLine002",
+                  "tagType": "UdtInstance",
+                  "typeId": "FillingEdgeToPlatform",
+                  "tags": [
+                    {
+                      "name": "EdgeData",
+                      "tagType": "Folder",
+                      "tags": [
+                        {
+                          "name": "ProductionData",
+                          "tagType": "Folder",
+                          "tags": [
+                            {
+                              "name": "GoodPartsCounter",
+                              "tagType": "AtomicTag",
+                              "dataType": "Int4"
+                            },
+                            {
+                              "name": "RejectCounter",
+                              "tagType": "AtomicTag",
+                              "dataType": "Int4"
+                            },
+                            {
+                              "name": "BatchNumber",
+                              "tagType": "AtomicTag",
+                              "dataType": "String"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
