@@ -38,6 +38,11 @@
                   "name": "Vibration",
                   "tagType": "AtomicTag",
                   "dataType": "Float8"
+                },
+                {
+                  "name": "NewSensorV2",
+                  "tagType": "AtomicTag",
+                  "dataType": "Float4"
                 }
               ]
             }
