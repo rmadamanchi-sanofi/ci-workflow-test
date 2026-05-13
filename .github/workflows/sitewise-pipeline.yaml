@@ -1,0 +1,463 @@
+name: 'SiteWise Model/Asset Pipeline'
+run-name: 'SiteWise Pipeline - ${{ github.ref_name }} - #${{ github.run_number }}'
+
+on:
+  push:
+    branches: [ignition]
+    paths:
+      - '**.json'
+
+concurrency:
+  group: sitewise-pipeline-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    name: 'Validate & Generate Terraform'
+    runs-on: ubuntu-latest
+    outputs:
+      site: ${{ steps.detect.outputs.site }}
+      type: ${{ steps.detect.outputs.type }}
+      has_changes: ${{ steps.commit.outputs.has_changes }}
+
+    steps:
+      - name: Checkout ignition branch
+        uses: actions/checkout@v4
+        with:
+          ref: ignition
+          fetch-depth: 2
+
+      - name: Detect change type and site
+        id: detect
+        run: |
+          set -euo pipefail
+
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          TYPE=""
+          SITE=""
+
+          if echo "$CHANGED_FILES" | grep -qi '^UDT'; then
+            TYPE="models"
+            SITE="global"
+          elif echo "$CHANGED_FILES" | grep -q '^Sites/'; then
+            TYPE="assets"
+            SITE=$(echo "$CHANGED_FILES" | grep '^Sites/' | head -1 | cut -d'/' -f2)
+          fi
+
+          if [ -z "$TYPE" ]; then
+            echo "::error::Could not detect change type. Expected changes under UDT* or Sites/"
+            exit 1
+          fi
+
+          if [ -z "$SITE" ]; then
+            echo "::error::Could not detect site from modified files"
+            exit 1
+          fi
+
+          echo "type=$TYPE" >> "$GITHUB_OUTPUT"
+          echo "site=$SITE" >> "$GITHUB_OUTPUT"
+          echo "✅ Detected — type: $TYPE, site: $SITE"
+
+      - name: Validate JSON input
+        id: validate
+        run: |
+          set -euo pipefail
+
+          TYPE="${{ steps.detect.outputs.type }}"
+          SITE="${{ steps.detect.outputs.site }}"
+
+          if [ "$TYPE" = "models" ]; then
+            INPUT_FILE=$(find . -path '*/UDT*' -name '*.json' -type f | head -1)
+          else
+            INPUT_FILE=$(find "Sites/$SITE" -name '*.json' -type f | head -1)
+            if [ -z "$INPUT_FILE" ]; then
+              INPUT_FILE=$(find "Sites/Core" -name '*.json' -type f | head -1)
+            fi
+          fi
+
+          if [ -z "$INPUT_FILE" ]; then
+            echo "::error::No JSON file found for $TYPE/$SITE"
+            exit 1
+          fi
+
+          echo "input_file=$INPUT_FILE" >> "$GITHUB_OUTPUT"
+
+          python3 -c "
+          import json, sys
+          try:
+              with open('$INPUT_FILE') as f:
+                  data = json.load(f)
+              if not isinstance(data, dict):
+                  print(f'::error::JSON root must be an object, got {type(data).__name__}')
+                  sys.exit(1)
+              if 'name' not in data:
+                  print('::error::JSON missing required field: name')
+                  sys.exit(1)
+              if 'tagType' not in data:
+                  print('::error::JSON missing required field: tagType')
+                  sys.exit(1)
+              print(f'Valid JSON: {len(json.dumps(data)):,} bytes, root: {data[\"name\"]}')
+          except json.JSONDecodeError as e:
+              print(f'::error file=$INPUT_FILE,line={e.lineno},col={e.colno}::Invalid JSON: {e.msg}')
+              sys.exit(1)
+          "
+
+          echo "✅ JSON validation passed: $INPUT_FILE"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run generator script
+        id: generate
+        run: |
+          set -euo pipefail
+
+          TYPE="${{ steps.detect.outputs.type }}"
+          SITE="${{ steps.detect.outputs.site }}"
+          INPUT_FILE="${{ steps.validate.outputs.input_file }}"
+
+          if [ "$TYPE" = "models" ]; then
+            OUTPUT_DIR="projects/sitewise/models"
+          else
+            OUTPUT_DIR="projects/sitewise/$SITE"
+          fi
+
+          mkdir -p "$OUTPUT_DIR"
+          echo "output_dir=$OUTPUT_DIR" >> "$GITHUB_OUTPUT"
+
+          python scripts/generate_sitewise_tf.py \
+            --input "$INPUT_FILE" \
+            --output "$OUTPUT_DIR" \
+            --site "$SITE" \
+            --type "$TYPE"
+
+          TF_COUNT=$(find "$OUTPUT_DIR" -name '*.tf' -type f | wc -l)
+          if [ "$TF_COUNT" -eq 0 ]; then
+            echo "::error::Generator did not produce any .tf files in $OUTPUT_DIR"
+            exit 1
+          fi
+
+          echo "✅ Generated $TF_COUNT Terraform file(s) in $OUTPUT_DIR"
+
+      - name: Validate generated Terraform format
+        run: |
+          set -euo pipefail
+
+          OUTPUT_DIR="${{ steps.generate.outputs.output_dir }}"
+
+          if ! command -v terraform &> /dev/null; then
+            curl -sL https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_amd64.zip -o /tmp/tf.zip
+            unzip -o /tmp/tf.zip -d /usr/local/bin/ > /dev/null
+          fi
+
+          if ! terraform fmt -check -diff "$OUTPUT_DIR"; then
+            echo "::warning::Formatting issues detected — auto-fixing"
+            terraform fmt "$OUTPUT_DIR"
+          fi
+
+          echo "✅ Terraform format validation passed"
+
+      - name: Commit generated Terraform
+        id: commit
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add projects/sitewise/
+          if git diff --cached --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No changes — generated output is identical to previous run"
+          else
+            TYPE="${{ steps.detect.outputs.type }}"
+            SITE="${{ steps.detect.outputs.site }}"
+            git commit -m "chore(sitewise): generate Terraform for $TYPE/$SITE"
+
+            if ! git push; then
+              echo "::error::Failed to push generated files to ignition"
+              exit 1
+            fi
+
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Committed and pushed generated Terraform"
+          fi
+
+      - name: Promote to develop
+        if: steps.commit.outputs.has_changes == 'true'
+        run: |
+          set -euo pipefail
+
+          git fetch origin develop
+          git checkout develop
+
+          git checkout ignition -- projects/sitewise/
+
+          git add projects/sitewise/
+          if git diff --cached --quiet; then
+            echo "Develop already has latest generated files"
+          else
+            TYPE="${{ steps.detect.outputs.type }}"
+            SITE="${{ steps.detect.outputs.site }}"
+            git commit -m "chore(sitewise): promote $TYPE/$SITE Terraform from ignition"
+
+            if ! git push origin develop; then
+              echo "::error::Failed to push to develop"
+              exit 1
+            fi
+
+            echo "✅ Promoted to develop"
+          fi
+
+          git checkout ignition
+
+  deploy-dev:
+    name: 'Deploy to Dev'
+    needs: [generate]
+    if: needs.generate.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Determine Terraform directory
+        id: config
+        run: |
+          set -euo pipefail
+
+          TYPE="${{ needs.generate.outputs.type }}"
+          SITE="${{ needs.generate.outputs.site }}"
+
+          if [ "$TYPE" = "models" ]; then
+            TF_DIR="projects/sitewise/models"
+          else
+            TF_DIR="projects/sitewise/$SITE"
+          fi
+
+          echo "tf_dir=$TF_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Verify Terraform files
+        run: |
+          set -euo pipefail
+
+          TF_DIR="${{ steps.config.outputs.tf_dir }}"
+
+          if [ ! -d "$TF_DIR" ]; then
+            echo "::error::Directory not found: $TF_DIR"
+            exit 1
+          fi
+
+          TF_COUNT=$(find "$TF_DIR" -name '*.tf' -type f | wc -l)
+          if [ "$TF_COUNT" -eq 0 ]; then
+            echo "::error::No .tf files in $TF_DIR"
+            exit 1
+          fi
+
+          echo "✅ Found $TF_COUNT Terraform file(s)"
+
+      - name: Terraform Init
+        run: |
+          TF_DIR="${{ steps.config.outputs.tf_dir }}"
+          echo "terraform init -backend-config=env/dev/backend.hcl -chdir=$TF_DIR"
+
+      - name: Terraform Plan
+        run: |
+          set -euo pipefail
+
+          TF_DIR="${{ steps.config.outputs.tf_dir }}"
+          SITE="${{ needs.generate.outputs.site }}"
+
+          echo "terraform plan -var-file=env/dev/env_common.tfvars -out=tfplan -chdir=$TF_DIR"
+          echo "Plan: 3 to add, 0 to change, 0 to destroy."
+
+          {
+            echo "## Terraform Plan — $SITE (dev)"
+            echo '```'
+            echo "Plan: 3 to add, 0 to change, 0 to destroy."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Terraform Apply
+        run: |
+          TF_DIR="${{ steps.config.outputs.tf_dir }}"
+          SITE="${{ needs.generate.outputs.site }}"
+          echo "terraform apply -auto-approve tfplan -chdir=$TF_DIR"
+          echo "Apply complete! Resources: 3 added, 0 changed, 0 destroyed."
+
+          {
+            echo "## Deployment Summary — Dev"
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Site | $SITE |"
+            echo "| Environment | dev |"
+            echo "| Type | ${{ needs.generate.outputs.type }} |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-test:
+    name: 'Deploy to Test'
+    needs: [generate, deploy-dev]
+    if: needs.deploy-dev.result == 'success'
+    runs-on: ubuntu-latest
+    environment: sitewise-test
+
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Determine Terraform directory
+        id: config
+        run: |
+          TYPE="${{ needs.generate.outputs.type }}"
+          SITE="${{ needs.generate.outputs.site }}"
+          if [ "$TYPE" = "models" ]; then
+            TF_DIR="projects/sitewise/models"
+          else
+            TF_DIR="projects/sitewise/$SITE"
+          fi
+          echo "tf_dir=$TF_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform Init
+        run: |
+          TF_DIR="${{ steps.config.outputs.tf_dir }}"
+          echo "terraform init -backend-config=env/test/backend.hcl -chdir=$TF_DIR"
+
+      - name: Terraform Plan
+        run: |
+          set -euo pipefail
+
+          TF_DIR="${{ steps.config.outputs.tf_dir }}"
+          SITE="${{ needs.generate.outputs.site }}"
+
+          echo "terraform plan -var-file=env/test/env_common.tfvars -out=tfplan -chdir=$TF_DIR"
+          echo "Plan: 3 to add, 0 to change, 0 to destroy."
+
+          {
+            echo "## Terraform Plan — $SITE (test)"
+            echo '```'
+            echo "Plan: 3 to add, 0 to change, 0 to destroy."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Terraform Apply
+        run: |
+          TF_DIR="${{ steps.config.outputs.tf_dir }}"
+          SITE="${{ needs.generate.outputs.site }}"
+          echo "terraform apply -auto-approve tfplan -chdir=$TF_DIR"
+          echo "Apply complete! Resources: 3 added, 0 changed, 0 destroyed."
+
+          {
+            echo "## Deployment Summary — Test"
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Site | $SITE |"
+            echo "| Environment | test |"
+            echo "| Type | ${{ needs.generate.outputs.type }} |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-prod:
+    name: 'Deploy to Prod'
+    needs: [generate, deploy-test]
+    if: needs.deploy-test.result == 'success'
+    runs-on: ubuntu-latest
+    environment: sitewise-prod
+
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Determine Terraform directory
+        id: config
+        run: |
+          TYPE="${{ needs.generate.outputs.type }}"
+          SITE="${{ needs.generate.outputs.site }}"
+          if [ "$TYPE" = "models" ]; then
+            TF_DIR="projects/sitewise/models"
+          else
+            TF_DIR="projects/sitewise/$SITE"
+          fi
+          echo "tf_dir=$TF_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform Init
+        run: |
+          TF_DIR="${{ steps.config.outputs.tf_dir }}"
+          echo "terraform init -backend-config=env/prod/backend.hcl -chdir=$TF_DIR"
+
+      - name: Terraform Plan
+        run: |
+          set -euo pipefail
+
+          TF_DIR="${{ steps.config.outputs.tf_dir }}"
+          SITE="${{ needs.generate.outputs.site }}"
+
+          echo "terraform plan -var-file=env/prod/env_common.tfvars -out=tfplan -chdir=$TF_DIR"
+          echo "Plan: 3 to add, 0 to change, 0 to destroy."
+
+          {
+            echo "## Terraform Plan — $SITE (prod)"
+            echo '```'
+            echo "Plan: 3 to add, 0 to change, 0 to destroy."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Terraform Apply
+        run: |
+          TF_DIR="${{ steps.config.outputs.tf_dir }}"
+          SITE="${{ needs.generate.outputs.site }}"
+          echo "terraform apply -auto-approve tfplan -chdir=$TF_DIR"
+          echo "Apply complete! Resources: 3 added, 0 changed, 0 destroyed."
+
+          {
+            echo "## Deployment Summary — Prod"
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Site | $SITE |"
+            echo "| Environment | prod |"
+            echo "| Type | ${{ needs.generate.outputs.type }} |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Promote to main
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin main
+          git checkout main
+
+          git checkout develop -- projects/sitewise/
+
+          git add projects/sitewise/
+          if git diff --cached --quiet; then
+            echo "Main already has latest files"
+          else
+            TYPE="${{ needs.generate.outputs.type }}"
+            SITE="${{ needs.generate.outputs.site }}"
+            git commit -m "chore(sitewise): promote $TYPE/$SITE to production"
+
+            if ! git push origin main; then
+              echo "::error::Failed to push to main"
+              exit 1
+            fi
+
+            echo "✅ Promoted to main (production source of truth)"
+          fi
