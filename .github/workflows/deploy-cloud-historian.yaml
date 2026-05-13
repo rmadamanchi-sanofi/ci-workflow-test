@@ -1,0 +1,15 @@
+name: 'Deploy Cloud Historian'
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - "projects/cloud-historian/**"
+
+jobs:
+  deploy:
+    name: 'Terraform Deploy'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "terraform apply -chdir=projects/cloud-historian (simulated)"
