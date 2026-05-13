@@ -48,6 +48,11 @@
                   "name": "MotorCurrent",
                   "tagType": "AtomicTag",
                   "dataType": "Float4"
+                },
+                {
+                  "name": "TorqueOutput",
+                  "tagType": "AtomicTag",
+                  "dataType": "Float4"
                 }
               ]
             }

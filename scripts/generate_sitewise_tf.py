@@ -302,6 +302,7 @@ def main():
     parser.add_argument("--output", required=True, help="Path to output .tf file or output directory")
     parser.add_argument("--site", required=True, help="Site name (or 'global' for models)")
     parser.add_argument("--type", choices=["models", "assets"], help="Override type detection")
+    parser.add_argument("--summary", help="Path to write change summary (markdown)")
     args = parser.parse_args()
 
     try:
@@ -322,7 +323,6 @@ def main():
         # Determine output path
         output_path = args.output
         if os.path.isdir(output_path) or not output_path.endswith(".tf"):
-            # Output is a directory — derive filename from input
             output_dir = output_path
             output_filename = derive_output_filename(args.input, gen_type)
             output_path = os.path.join(output_dir, output_filename)
@@ -337,6 +337,16 @@ def main():
             if stripped != input_basename.rsplit(".json", 1)[0]:
                 print(f"  Version detected: {input_basename} → base name: {stripped}")
 
+        # Read existing output for change comparison
+        existing_properties = set()
+        if os.path.exists(output_path):
+            with open(output_path, "r") as f:
+                for line in f:
+                    if 'name' in line and '=' in line and '"' in line:
+                        prop_name = line.split('"')[1] if '"' in line.split('=', 1)[-1] else ""
+                        if prop_name and '/' in prop_name:
+                            existing_properties.add(prop_name)
+
         # Generate
         if gen_type == "models":
             validate_model_json(data)
@@ -345,11 +355,66 @@ def main():
             validate_asset_json(data)
             tf_content = generate_asset_tf(data, args.site)
 
+        # Extract new properties for comparison
+        new_properties = set()
+        for line in tf_content.split('\n'):
+            if 'name' in line and '=' in line and '"' in line:
+                parts = line.split('"')
+                if len(parts) >= 2:
+                    prop_name = parts[1]
+                    if '/' in prop_name:
+                        new_properties.add(prop_name)
+
         # Write output
         os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True)
         with open(output_path, "w") as f:
             f.write(tf_content)
 
+        # Generate change summary
+        added = new_properties - existing_properties
+        removed = existing_properties - new_properties
+        unchanged = new_properties & existing_properties
+
+        summary_lines = []
+        summary_lines.append(f"## Change Summary — {gen_type}/{args.site}")
+        summary_lines.append("")
+        summary_lines.append(f"**Input:** `{args.input}`")
+        summary_lines.append(f"**Output:** `{output_path}`")
+        summary_lines.append("")
+
+        if not existing_properties:
+            summary_lines.append(f"**New file** — {len(new_properties)} properties defined")
+        else:
+            summary_lines.append(f"| Metric | Count |")
+            summary_lines.append(f"|--------|-------|")
+            summary_lines.append(f"| Properties added | {len(added)} |")
+            summary_lines.append(f"| Properties removed | {len(removed)} |")
+            summary_lines.append(f"| Properties unchanged | {len(unchanged)} |")
+            summary_lines.append(f"| Total properties | {len(new_properties)} |")
+
+            if added:
+                summary_lines.append("")
+                summary_lines.append("**Added:**")
+                for prop in sorted(added):
+                    summary_lines.append(f"- `{prop}`")
+
+            if removed:
+                summary_lines.append("")
+                summary_lines.append("**Removed:**")
+                for prop in sorted(removed):
+                    summary_lines.append(f"- `{prop}`")
+
+        summary_text = "\n".join(summary_lines)
+
+        if args.summary:
+            with open(args.summary, "w") as f:
+                f.write(summary_text)
+            print(f"  Summary written to: {args.summary}")
+
+        # Always print summary to stdout
+        print("")
+        print(summary_text)
+        print("")
         print(f"Generated: {output_path}")
         print(f"  Type: {gen_type}")
         print(f"  Site: {args.site}")

@@ -140,12 +140,18 @@ jobs:
             --input "$INPUT_FILE" \
             --output "$OUTPUT_DIR" \
             --site "$SITE" \
-            --type "$TYPE"
+            --type "$TYPE" \
+            --summary /tmp/change-summary.md
 
           TF_COUNT=$(find "$OUTPUT_DIR" -name '*.tf' -type f | wc -l)
           if [ "$TF_COUNT" -eq 0 ]; then
             echo "::error::Generator did not produce any .tf files in $OUTPUT_DIR"
             exit 1
+          fi
+
+          # Post change summary to Step Summary for reviewer visibility
+          if [ -f /tmp/change-summary.md ]; then
+            cat /tmp/change-summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
 
           echo "✅ Generated $TF_COUNT Terraform file(s) in $OUTPUT_DIR"
