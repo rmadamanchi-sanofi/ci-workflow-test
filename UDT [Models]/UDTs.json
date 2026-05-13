@@ -422,6 +422,11 @@
                           "valueSource": "expr"
                         }
                       ]
+                    },
+                    {
+                      "name": "PipelineTestTag",
+                      "tagType": "AtomicTag",
+                      "dataType": "Int4"
                     }
                   ],
                   "typeColor": -16776961,
@@ -588,7 +593,7 @@
                         {
                           "dataType": "Boolean",
                           "documentation": "",
-                          "expression": "\r\nif(\r\n  ({[.]../OutputArea/BatchData/BatchResults/MixingStatus} \u003d 1 \u0026\u0026 lower({[.]../OutputArea/EquipmentState/NetworkConnectionStatus}) !\u003d \"connected\"),\r\n  1,\r\n  0\r\n)\r\n",
+                          "expression": "\r\nif(\r\n  ({[.]../OutputArea/BatchData/BatchResults/MixingStatus} = 1 && lower({[.]../OutputArea/EquipmentState/NetworkConnectionStatus}) != \"connected\"),\r\n  1,\r\n  0\r\n)\r\n",
                           "name": "DisconnectionDetected",
                           "readOnly": true,
                           "sourceTagPath": {
@@ -936,7 +941,7 @@
                             {
                               "dataType": "String",
                               "documentation": "Information about the connection status between equipment and gateway",
-                              "expression": "if({[.]ConnectionEnabled},if(tag(concat(\"[System]Gateway/\",{EquipmentConnectionName},\"/State\"))\u003d\"Running\",\"Connected\",\"NotConnected\"),\"NotConnected\")",
+                              "expression": "if({[.]ConnectionEnabled},if(tag(concat(\"[System]Gateway/\",{EquipmentConnectionName},\"/State\"))=\"Running\",\"Connected\",\"NotConnected\"),\"NotConnected\")",
                               "name": "NetworkConnectionStatus",
                               "readOnly": true,
                               "sourceTagPath": "Fill in the reference tag path",
@@ -24795,7 +24800,7 @@
                         {
                           "dataType": "Boolean",
                           "documentation": "",
-                          "expression": "\r\nif(\r\n  ({[.]../InputArea/BatchData/BatchInfo/BatchState} \u003d 1 \u0026\u0026 lower({[.]NetworkConnectionStatus}) !\u003d \"connected\"),\r\n  1,\r\n  0\r\n)\r\n",
+                          "expression": "\r\nif(\r\n  ({[.]../InputArea/BatchData/BatchInfo/BatchState} = 1 && lower({[.]NetworkConnectionStatus}) != \"connected\"),\r\n  1,\r\n  0\r\n)\r\n",
                           "name": "DisconnectionDetected",
                           "readOnly": true,
                           "sourceTagPath": {
@@ -34047,14 +34052,14 @@
                       "typeId": "SanofiLibrary/SolidForm_GRANULATION_DryAndWet/StandardEquipmentWithPhasesUDT_V1_0/Calculations/ParameterCalculation"
                     },
                     {
-                      "documentation": "monitors the phase active state and the equipment connection state; if equipment disconnects while the phase is active than the tag\u0027s value is changed to 1",
+                      "documentation": "monitors the phase active state and the equipment connection state; if equipment disconnects while the phase is active than the tag's value is changed to 1",
                       "eventScripts": [
                         {
                           "eventid": "valueChanged",
-                          "script": "\tif not initialChange and (currentValue.value \u003d\u003d 1):\n\t\ttargetEquipBasePath \u003d tag[\u0027parameters\u0027][\u0027PathToTargetEquip\u0027]\n\t\tPhaseNo \u003d tag[\u0027parameters\u0027][\u0027PhaseNo\u0027]\n\t\tphaseNoStr \u003d \"{:02}\".format(PhaseNo)\n\t\tsystem.tag.writeBlocking([targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/DataIsValid\"],[-1])\n"
+                          "script": "\tif not initialChange and (currentValue.value == 1):\n\t\ttargetEquipBasePath = tag['parameters']['PathToTargetEquip']\n\t\tPhaseNo = tag['parameters']['PhaseNo']\n\t\tphaseNoStr = \"{:02}\".format(PhaseNo)\n\t\tsystem.tag.writeBlocking([targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/DataIsValid\"],[-1])\n"
                         }
                       ],
-                      "expression": "if(\r\n  {[.]PhaseActive} \u0026\u0026\r\n  (lower({[.]../../../OutputArea/EquipmentState/NetworkConnectionStatus}) !\u003d \"connected\" \u0026\u0026\r\n   lower({[.]../../../OutputArea/EquipmentState/NetworkConnectionStatus}) !\u003d \"running\"),\r\n  1,\r\n  0\r\n)\r\n\r\n",
+                      "expression": "if(\r\n  {[.]PhaseActive} &&\r\n  (lower({[.]../../../OutputArea/EquipmentState/NetworkConnectionStatus}) != \"connected\" &&\r\n   lower({[.]../../../OutputArea/EquipmentState/NetworkConnectionStatus}) != \"running\"),\r\n  1,\r\n  0\r\n)\r\n\r\n",
                       "name": "EquipDisconnectionDetected",
                       "tagGroup": "GroupSlow",
                       "tagType": "AtomicTag",
@@ -34163,14 +34168,14 @@
                     },
                     {
                       "dataType": "Boolean",
-                      "documentation": "signalizes  the phase\u0027s activate state based on the MES input ",
+                      "documentation": "signalizes  the phase's activate state based on the MES input ",
                       "eventScripts": [
                         {
                           "eventid": "valueChanged",
-                          "script": "\ttargetEquipBasePath \u003d tag[\u0027parameters\u0027][\u0027PathToTargetEquip\u0027]\n\tphaseNo \u003d tag[\u0027parameters\u0027][\u0027PhaseNo\u0027]\n\t#build the string to be used in the tag path logic\n\tphaseNoStr \u003d \"{:02}\".format(phaseNo)\n\t#read the tag\u0027s parameter values\n\tif not initialChange and currentValue.value \u003d\u003d True and previousValue.value \u003d\u003d False:\n\t\t#phase was just activated\n\t\t#store the start time\n\t\tsystem.tag.writeBlocking(\"[.]StartTimeStamp\", currentValue.timestamp)\n\t\t#assume, at phase start, that the data will be valid; write the DataIsValid to 1\n\t\t#system.tag.writeBlocking(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/DataIsValid\",1)\n\telif not initialChange and currentValue.value \u003d\u003d False and previousValue.value \u003d\u003d True:\n\t\ttagPaths \u003d[]\n\t\tvalues \u003d []\n\t\t#phase was just deactivated\n\t\t#store the end time\n\t\tendTimePhase\u003dsystem.date.now()\n\t\tsystem.tag.writeBlocking(\"[.]EndTimeStamp\",endTimePhase)\n\t\t#read the phase\u0027s start time + the DataIsValid tag value from the MARS results area\n\t\ttagPaths+\u003d[\"[.]StartTimeStamp\",targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/DataIsValid\"]\n\t\t#read the start and end timestamps for the requested phase\n\t\tvalues \u003d system.tag.readBlocking(tagPaths)\n\t\tstartTimePhase \u003d values[0].value\n\t\tdataValid \u003d values[1].value\n\t\t#verifies if the DataIsValid has the initial value since the since the batch was started\n\t\tif (dataValid \u003d\u003d 0):\n\t\t\t#no disconection was detected -\u003e mark the results as valid\n\t\t\tdataValid \u003d 1\n\t\t#calculate the total phase duration\n\t\tphaseDuration \u003d system.date.secondsBetween(startTimePhase, endTimePhase)\n\t\t#get the target equipmnet base path\n\t\ttagPaths \u003d[]\n\t\tvalues \u003d []\n\t\t#write the start and end time to the final results area\n\t\ttagPaths.append(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/StartTimestamp\")\n\t\ttagPaths.append(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/EndTimestamp\")\n\t\ttagPaths.append(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/PhaseDuration\")\n\t\ttagPaths.append(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/DataIsValid\")\n\t\t#dateFormat({[.]End_Timestamp_DateTime},\"yyyy-MM-dd HH:mm:ss\")\n\t\tvalues.append(system.date.format(startTimePhase,\"yyyy-MM-dd HH:mm:ss\"))\n\t\tvalues.append(system.date.format(endTimePhase,\"yyyy-MM-dd HH:mm:ss\"))\n\t\tvalues.append(phaseDuration)\n\t\tvalues.append(dataValid)\n\t\tsystem.tag.writeBlocking(tagPaths,values)"
+                          "script": "\ttargetEquipBasePath = tag['parameters']['PathToTargetEquip']\n\tphaseNo = tag['parameters']['PhaseNo']\n\t#build the string to be used in the tag path logic\n\tphaseNoStr = \"{:02}\".format(phaseNo)\n\t#read the tag's parameter values\n\tif not initialChange and currentValue.value == True and previousValue.value == False:\n\t\t#phase was just activated\n\t\t#store the start time\n\t\tsystem.tag.writeBlocking(\"[.]StartTimeStamp\", currentValue.timestamp)\n\t\t#assume, at phase start, that the data will be valid; write the DataIsValid to 1\n\t\t#system.tag.writeBlocking(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/DataIsValid\",1)\n\telif not initialChange and currentValue.value == False and previousValue.value == True:\n\t\ttagPaths =[]\n\t\tvalues = []\n\t\t#phase was just deactivated\n\t\t#store the end time\n\t\tendTimePhase=system.date.now()\n\t\tsystem.tag.writeBlocking(\"[.]EndTimeStamp\",endTimePhase)\n\t\t#read the phase's start time + the DataIsValid tag value from the MARS results area\n\t\ttagPaths+=[\"[.]StartTimeStamp\",targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/DataIsValid\"]\n\t\t#read the start and end timestamps for the requested phase\n\t\tvalues = system.tag.readBlocking(tagPaths)\n\t\tstartTimePhase = values[0].value\n\t\tdataValid = values[1].value\n\t\t#verifies if the DataIsValid has the initial value since the since the batch was started\n\t\tif (dataValid == 0):\n\t\t\t#no disconection was detected -> mark the results as valid\n\t\t\tdataValid = 1\n\t\t#calculate the total phase duration\n\t\tphaseDuration = system.date.secondsBetween(startTimePhase, endTimePhase)\n\t\t#get the target equipmnet base path\n\t\ttagPaths =[]\n\t\tvalues = []\n\t\t#write the start and end time to the final results area\n\t\ttagPaths.append(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/StartTimestamp\")\n\t\ttagPaths.append(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/EndTimestamp\")\n\t\ttagPaths.append(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/PhaseDuration\")\n\t\ttagPaths.append(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/DataIsValid\")\n\t\t#dateFormat({[.]End_Timestamp_DateTime},\"yyyy-MM-dd HH:mm:ss\")\n\t\tvalues.append(system.date.format(startTimePhase,\"yyyy-MM-dd HH:mm:ss\"))\n\t\tvalues.append(system.date.format(endTimePhase,\"yyyy-MM-dd HH:mm:ss\"))\n\t\tvalues.append(phaseDuration)\n\t\tvalues.append(dataValid)\n\t\tsystem.tag.writeBlocking(tagPaths,values)"
                         }
                       ],
-                      "expression": "if(({[.]../RecipeValidatedByMes} \u0026\u0026 {[.]MesPhaseID}!\u003d\"NoPhase\" \u0026\u0026 len({[.]MesPhaseID})\u003e0),{[.]PhaseActivatedByEquipPhase},0)",
+                      "expression": "if(({[.]../RecipeValidatedByMes} && {[.]MesPhaseID}!=\"NoPhase\" && len({[.]MesPhaseID})>0),{[.]PhaseActivatedByEquipPhase},0)",
                       "name": "PhaseActive",
                       "tagGroup": "GroupFast",
                       "tagType": "AtomicTag",
@@ -35656,14 +35661,14 @@
                       "eventScripts": [
                         {
                           "eventid": "valueChanged",
-                          "script": "\tphaseNo \u003d CriticalParamLib.recipePhaseNo\n\tparamNo \u003d CriticalParamLib.phaseParamNo\n\ttargetEquipBasePath \u003d tag[\u0027parameters\u0027][\u0027PathToTargetEquip\u0027]\n\t#logic for the rising edge of the Mes RecipeReleasedForCalculation signal \n\tif not initialChange and (currentValue.value\u003d\u003d1) and (previousValue.value\u003d\u003d0):\n\t\t#reset the recipe calculation flags\n\t\tpathList \u003d [\"[.]ActualActivePhase\",\"[.]PhaseNoToBeCalculated\",\"[.]reqCalculation\",\"[.]CalculatedResultsCounter\",\"[.]NumberOfValidRequestsReceived\"]\n\t\tvalueList \u003d [0,0,0,0,0]\n\t\tsystem.tag.writeBlocking(pathList, valueList)\n\t\t#extract the parent tag path for the current tag (.../RecipeCalculation )\n\t\ttagNameToReplace \u003d  tagPath.split(\"/\")[-1]\n\t\tBasePath \u003d tagPath.replace(\"/\"+tagNameToReplace,\"\")\n\t\t#loop and clear all the calculation data for each phase inside the RecipeCalculation\n\t\t#print \"base path: \"+BasePath \n\t\ti\u003d1\n\t\twhile (i\u003c\u003dphaseNo):\n\t\t\tCriticalParamLib.resetPhaseCalculationAreaData(BasePath,i,paramNo)  \n\t\t\ti+\u003d1\n\t\t#call the function to analyze the MES request\n\t\treqCheckResult \u003d CriticalParamLib.processMesRequest(targetEquipBasePath,BasePath)\n\t\t#write the verification result to the MARS handshake tags\n\t\tsystem.tag.writeBlocking([targetEquipBasePath+\"/MESData/Handshake/RequestIsValid\",targetEquipBasePath+\"/MESData/Handshake/FeedbackOnTheRequest\",\"[.]NumberOfValidRequestsReceived\"],reqCheckResult)\n\t\t#call the script for reseting all the critical calculations results \n\t\tCriticalParamLib.resetCriticalParamResults(targetEquipBasePath,phaseNo,paramNo)\n\t#logic for the falling edge of the Mes RecipeReleasedForCalculation signal \t\n\tif not initialChange and (currentValue.value\u003d\u003d0) and (previousValue.value\u003d\u003d1):\n\t\t#clear the current status of the recipe calculation\n\t\tactivePhase \u003d system.tag.readBlocking(\"[.]ActualActivePhase\")[0].value\n\t\tactivePhaseStr \u003d \"{:02}\".format(activePhase)\n\t\tpaths \u003d []\n\t\tpaths+\u003d[(\"[.]ActualActivePhase\"),\"[.]reqCalculation\",\"[.]PhaseNoToBeCalculated\",\"[.]PhaseCalculation\"+activePhaseStr+\"/PhaseActivatedByEquipPhase\",\"[.]NumberOfValidRequestsReceived\",]\n\t\tvalues \u003d [0,0,0,0,0]\n\t\tsystem.tag.writeBlocking(paths, values)\n\t\t#call the script to reset all the MES calculation requests\n\t\t# !!! MUST BE COMMNETED WHEN TESTING FOR DEBUG\n\t\tCriticalParamLib.resetMesCalculationRequests(targetEquipBasePath,phaseNo)"
+                          "script": "\tphaseNo = CriticalParamLib.recipePhaseNo\n\tparamNo = CriticalParamLib.phaseParamNo\n\ttargetEquipBasePath = tag['parameters']['PathToTargetEquip']\n\t#logic for the rising edge of the Mes RecipeReleasedForCalculation signal \n\tif not initialChange and (currentValue.value==1) and (previousValue.value==0):\n\t\t#reset the recipe calculation flags\n\t\tpathList = [\"[.]ActualActivePhase\",\"[.]PhaseNoToBeCalculated\",\"[.]reqCalculation\",\"[.]CalculatedResultsCounter\",\"[.]NumberOfValidRequestsReceived\"]\n\t\tvalueList = [0,0,0,0,0]\n\t\tsystem.tag.writeBlocking(pathList, valueList)\n\t\t#extract the parent tag path for the current tag (.../RecipeCalculation )\n\t\ttagNameToReplace =  tagPath.split(\"/\")[-1]\n\t\tBasePath = tagPath.replace(\"/\"+tagNameToReplace,\"\")\n\t\t#loop and clear all the calculation data for each phase inside the RecipeCalculation\n\t\t#print \"base path: \"+BasePath \n\t\ti=1\n\t\twhile (i<=phaseNo):\n\t\t\tCriticalParamLib.resetPhaseCalculationAreaData(BasePath,i,paramNo)  \n\t\t\ti+=1\n\t\t#call the function to analyze the MES request\n\t\treqCheckResult = CriticalParamLib.processMesRequest(targetEquipBasePath,BasePath)\n\t\t#write the verification result to the MARS handshake tags\n\t\tsystem.tag.writeBlocking([targetEquipBasePath+\"/MESData/Handshake/RequestIsValid\",targetEquipBasePath+\"/MESData/Handshake/FeedbackOnTheRequest\",\"[.]NumberOfValidRequestsReceived\"],reqCheckResult)\n\t\t#call the script for reseting all the critical calculations results \n\t\tCriticalParamLib.resetCriticalParamResults(targetEquipBasePath,phaseNo,paramNo)\n\t#logic for the falling edge of the Mes RecipeReleasedForCalculation signal \t\n\tif not initialChange and (currentValue.value==0) and (previousValue.value==1):\n\t\t#clear the current status of the recipe calculation\n\t\tactivePhase = system.tag.readBlocking(\"[.]ActualActivePhase\")[0].value\n\t\tactivePhaseStr = \"{:02}\".format(activePhase)\n\t\tpaths = []\n\t\tpaths+=[(\"[.]ActualActivePhase\"),\"[.]reqCalculation\",\"[.]PhaseNoToBeCalculated\",\"[.]PhaseCalculation\"+activePhaseStr+\"/PhaseActivatedByEquipPhase\",\"[.]NumberOfValidRequestsReceived\",]\n\t\tvalues = [0,0,0,0,0]\n\t\tsystem.tag.writeBlocking(paths, values)\n\t\t#call the script to reset all the MES calculation requests\n\t\t# !!! MUST BE COMMNETED WHEN TESTING FOR DEBUG\n\t\tCriticalParamLib.resetMesCalculationRequests(targetEquipBasePath,phaseNo)"
                         }
                       ],
-                      "expression": "if((tag(toString({PathToTargetEquip})+\u0027/MESData/Handshake/RecipeReleasedForCalculation\u0027)\u003d1),1,0)",
+                      "expression": "if((tag(toString({PathToTargetEquip})+'/MESData/Handshake/RecipeReleasedForCalculation')=1),1,0)",
                       "name": "RecipeValidatedByMes",
                       "opcItemPath": {
                         "bindType": "parameter",
-                        "binding": "nsu\u003dKEPServerEX;s\u003d{MesRecipeValidOpcPath}"
+                        "binding": "nsu=KEPServerEX;s={MesRecipeValidOpcPath}"
                       },
                       "opcServer": {
                         "bindType": "parameter",
@@ -35676,7 +35681,7 @@
                     },
                     {
                       "dataType": "Boolean",
-                      "documentation": "when TRUE \u003d block next phase activation until the calculation for the preceding phase is executed",
+                      "documentation": "when TRUE = block next phase activation until the calculation for the preceding phase is executed",
                       "name": "reqCalculation",
                       "tagGroup": "GroupFast",
                       "tagType": "AtomicTag",
@@ -36070,7 +36075,7 @@
                     },
                     {
                       "documentation": "indicates that the number of calculated results equals the number of requested calculations",
-                      "expression": "if(({[.]NumberOfValidRequestsReceived}\u003e0) \u0026\u0026 {[.]RecipeValidatedByMes} \u0026\u0026 ({[.]NumberOfValidRequestsReceived}-{[.]CalculatedResultsCounter}) \u003c\u003d 0,1,0)",
+                      "expression": "if(({[.]NumberOfValidRequestsReceived}>0) && {[.]RecipeValidatedByMes} && ({[.]NumberOfValidRequestsReceived}-{[.]CalculatedResultsCounter}) <= 0,1,0)",
                       "name": "CalculationResultsAvailable",
                       "tagGroup": "GroupSlow",
                       "tagType": "AtomicTag",
@@ -36864,7 +36869,7 @@
                     },
                     {
                       "dataType": "DataSet",
-                      "documentation": "for each equipment it contains the process values data used in calculations: process value\u0027s name (ParameterID), current value end setpoint tagpaths,  description and UoM values",
+                      "documentation": "for each equipment it contains the process values data used in calculations: process value's name (ParameterID), current value end setpoint tagpaths,  description and UoM values",
                       "name": "ProcessValuesDataset",
                       "tagGroup": "GroupSlow",
                       "tagType": "AtomicTag",
@@ -38453,7 +38458,7 @@
                     {
                       "dataType": "Boolean",
                       "documentation": "indicates if the recipe calculation logic can be executed based on internal or external conditions: mes validation, equipment state...",
-                      "expression": "if(({[.]RecipeValidatedByMes} \u0026\u0026 {[.]../../OutputArea/EquipmentState/EquipmentState}\u003d\"Running\"),1,0)",
+                      "expression": "if(({[.]RecipeValidatedByMes} && {[.]../../OutputArea/EquipmentState/EquipmentState}=\"Running\"),1,0)",
                       "name": "RecipeEnabledToExecute",
                       "tagGroup": "GroupSlow",
                       "tagType": "AtomicTag",
@@ -38465,15 +38470,15 @@
                       "eventScripts": [
                         {
                           "eventid": "valueChanged",
-                          "script": "\t#detect if equipment has activated any phase number\n\t# !!! The phase number used here is the logical phase number (1-10) !!!\n\thistorianName \u003d tag[\u0027parameters\u0027][\u0027HistorianName\u0027]\n\tif not initialChange:\n\t\tactualEquipPhase \u003d currentValue.value\n\t\t#build the string to be used in the tag path logic\n\t\tactivePhaseStringNo\u003d\"{:02}\".format(actualEquipPhase)\n\t\t#get the previous phase number value \u003d the phase thta just ended and needs calculations\n\t\t#print \"new phase detected with tag value \"+str(actualEquipPhase)\n\t\tphaseNumberToBeCalculated \u003d system.tag.readBlocking([\"[.]PhaseNoToBeCalculated\"])[0].value\n\t\t#build the string to be used in the tag path logic - PhaseNoToBeCalculated\n\t\tphaseNumberToBeCalculatedStr\u003d\"{:02}\".format(phaseNumberToBeCalculated)\n\t\tupdateValues \u003d 0\n\t\tpathList \u003d [\"[.]reqCalculation\",\"[.]ActualActivePhase\"]\n\t\t#read the PhaseID for ......\n\t\tif(actualEquipPhase\u003e0):\n\t\t\tpathList.append(\"[.]PhaseCalculation\"+activePhaseStringNo+\"/MesPhaseID\")\n\t\t#if there is an previous phase to be calculated then check the phase active state\n\t\tif (phaseNumberToBeCalculated\u003e0):\n\t\t\tpathList.append(\"[.]PhaseCalculation\"+phaseNumberToBeCalculatedStr+\"/PhaseActivatedByEquipPhase\")\n\t\t#read the actual valued of specific tags\n\t\tvalueList \u003d system.tag.readBlocking(pathList)\n\t\treqCalc \u003d valueList[0].value\n\t\t#print(\"reqCalc value: \"+str(reqCalc))\n\t\tactualActivePhase \u003d valueList[1].value\n\t\t#read the phase Mes ID to verify if the phase was requested by MES for calculations \n\t\tphaseMesId \u003d \"NoPhase\"\n\t\tlistIdx \u003d 0\n\t\tif(actualEquipPhase\u003e0):\n\t\t\tphaseMesId \u003d valueList[2].value\n\t\t\tlistIdx\u003d1\n\t\t#get the state for the previous phase (active or inactive)\t\n\t\tprePhaseIsActive \u003d 0\n\t\tif (phaseNumberToBeCalculated\u003e0):\n\t\t\tprePhaseIsActive \u003d valueList[2+listIdx].value\n\t\tfinalPathList \u003d []\n\t\tfinalValueList \u003d []\n\t\t#check if it is a valid phase number and the phase has parameter to be calculated\n\t\tif(actualEquipPhase\u003e0):\n\t\t\tif((phaseNumberToBeCalculated \u003d\u003d 0) and (phaseMesId !\u003d \"NoPhase\")):\n\t\t\t\t#actual phase must pe activated\n\t\t\t\t#print \"new phase started\"\n\t\t\t\tfinalPathList.append(\"[.]PhaseCalculation\"+activePhaseStringNo+\"/PhaseActivatedByEquipPhase\")\n\t\t\t\tfinalPathList.append(\"[.]PhaseNoToBeCalculated\")\n\t\t\t\tfinalPathList.append(\"[.]ActualActivePhase\")\n\t\t\t\tfinalValueList \u003d [1,actualEquipPhase,actualEquipPhase]\n\t\t\t\tupdateValues \u003d 1\n\t\t\t\t\n\t\t\telif(phaseNumberToBeCalculated\u003e0):\n\t\t\t\t#check if previous phase is still marked as active \n\t\t\t\tif(prePhaseIsActive \u003d\u003d 1):\n\t\t\t\t\tprint \"previous phase still active-\u003e to be calculated\"\n\t\t\t\t\t#deactivate previous phase\n\t\t\t\t\tfinalPathList.append(\"[.]PhaseCalculation\"+phaseNumberToBeCalculatedStr+\"/PhaseActivatedByEquipPhase\")\n\t\t\t\t\tfinalPathList.append(\"[.]ActualActivePhase\")\n\t\t\t\t\tfinalPathList.append(\"[.]reqCalculation\")\n\t\t\t\t\tfinalValueList \u003d [0,0,1]\n\t\t\t\t\tupdateValues \u003d 1\n\t\t\t\telse:\n\t\t\t\t\tif(phaseMesId !\u003d \"NoPhase\"):\n\t\t\t\t\t\tprint \"previous phase disabled -\u003e activate actual phase\"\n\t\t\t\t\t\t#actual phase must be activated\n\t\t\t\t\t\tfinalPathList.append(\"[.]PhaseCalculation\"+activePhaseStringNo+\"/PhaseActivatedByEquipPhase\")\n\t\t\t\t\t\tfinalPathList.append(\"[.]PhaseNoToBeCalculated\")\n\t\t\t\t\t\tfinalPathList.append(\"[.]ActualActivePhase\")\n\t\t\t\t\t\tfinalValueList \u003d [1,actualEquipPhase,actualEquipPhase]\n\t\t\t\t\t\tupdateValues \u003d 1\n\t\t\t\t\t#else:\n\t\t\t\t\t\t#print \"this phase cannot be activated \"\n\t\t#calculation request is activated\t\n\t\telif ((actualEquipPhase \u003d\u003d -1) and (reqCalc \u003d\u003d 1)): \n\t\t\t# finalPathList: idx0  \u003d reqCalc tag\n\t\t\tfinalPathList.append(\"[.]reqCalculation\")\n\t\t\tfinalPathList.append(\"[.]ActualActivePhase\")\n\t\t\tfinalPathList.append(\"[.]PhaseNoToBeCalculated\")\n\t\t\t#reset the reqCalc value\n\t\t\tfinalValueList \u003d [0,0,0]\n\t\t\tupdateValues \u003d 1\n\t\t\t#call the function for parameter calculations\n\t\t\t#basePath \u003d tagPath.replace(\"/RecipeCalculation/EquipActivePhaseNo\",\"/\")\n\t\t\t#get the tag\u0027s parent tag path - ..../RecipeCalculation\n\t\t\tbasePath \u003d \u0027/\u0027.join(tagPath.split(\u0027/\u0027)[:-1])\n\t\t\t#get the target equipmnet base path\n\t\t\ttargetEquipBasePath \u003d tag[\u0027parameters\u0027][\u0027PathToTargetEquip\u0027]\n\t\t\t#print \"call calculation  for phase no\"+phaseNumberToBeCalculatedStr\n\t\t\tCriticalParamLib.calculatePhaseResults(basePath,phaseNumberToBeCalculatedStr,targetEquipBasePath,historianName)\n\t\t\n\t\t#phase value is zero \n\t\telif ((actualEquipPhase \u003d\u003d 0) and (phaseNumberToBeCalculated\u003e0)): \n\t\t\t#print \"last phase was finished\"\n\t\t\t#check if previous phase is still marked as active \n\t\t\tif(prePhaseIsActive \u003d\u003d 1):\n\t\t\t\t#deactivate previous phase\n\t\t\t\tfinalPathList.append(\"[.]PhaseCalculation\"+phaseNumberToBeCalculatedStr+\"/PhaseActivatedByEquipPhase\")\n\t\t\t\t#finalPathList.append(\"[.]PhaseNoToBeCalculated\")\n\t\t\t\tfinalPathList.append(\"[.]reqCalculation\")\n\t\t\t\t#finalValueList \u003d [0,phaseToBeCalculated,1]\n\t\t\t\tfinalValueList \u003d [0,1]\n\t\t\t\tupdateValues \u003d 1\n\t\telse:\n\t\t\t#print \"nothing to do\"\n\t\t\tupdateValues \u003d 0\n\t\tif (updateValues \u003d\u003d 1):\n\t\t\tsystem.tag.writeBlocking(finalPathList,finalValueList)\t\t"
+                          "script": "\t#detect if equipment has activated any phase number\n\t# !!! The phase number used here is the logical phase number (1-10) !!!\n\thistorianName = tag['parameters']['HistorianName']\n\tif not initialChange:\n\t\tactualEquipPhase = currentValue.value\n\t\t#build the string to be used in the tag path logic\n\t\tactivePhaseStringNo=\"{:02}\".format(actualEquipPhase)\n\t\t#get the previous phase number value = the phase thta just ended and needs calculations\n\t\t#print \"new phase detected with tag value \"+str(actualEquipPhase)\n\t\tphaseNumberToBeCalculated = system.tag.readBlocking([\"[.]PhaseNoToBeCalculated\"])[0].value\n\t\t#build the string to be used in the tag path logic - PhaseNoToBeCalculated\n\t\tphaseNumberToBeCalculatedStr=\"{:02}\".format(phaseNumberToBeCalculated)\n\t\tupdateValues = 0\n\t\tpathList = [\"[.]reqCalculation\",\"[.]ActualActivePhase\"]\n\t\t#read the PhaseID for ......\n\t\tif(actualEquipPhase>0):\n\t\t\tpathList.append(\"[.]PhaseCalculation\"+activePhaseStringNo+\"/MesPhaseID\")\n\t\t#if there is an previous phase to be calculated then check the phase active state\n\t\tif (phaseNumberToBeCalculated>0):\n\t\t\tpathList.append(\"[.]PhaseCalculation\"+phaseNumberToBeCalculatedStr+\"/PhaseActivatedByEquipPhase\")\n\t\t#read the actual valued of specific tags\n\t\tvalueList = system.tag.readBlocking(pathList)\n\t\treqCalc = valueList[0].value\n\t\t#print(\"reqCalc value: \"+str(reqCalc))\n\t\tactualActivePhase = valueList[1].value\n\t\t#read the phase Mes ID to verify if the phase was requested by MES for calculations \n\t\tphaseMesId = \"NoPhase\"\n\t\tlistIdx = 0\n\t\tif(actualEquipPhase>0):\n\t\t\tphaseMesId = valueList[2].value\n\t\t\tlistIdx=1\n\t\t#get the state for the previous phase (active or inactive)\t\n\t\tprePhaseIsActive = 0\n\t\tif (phaseNumberToBeCalculated>0):\n\t\t\tprePhaseIsActive = valueList[2+listIdx].value\n\t\tfinalPathList = []\n\t\tfinalValueList = []\n\t\t#check if it is a valid phase number and the phase has parameter to be calculated\n\t\tif(actualEquipPhase>0):\n\t\t\tif((phaseNumberToBeCalculated == 0) and (phaseMesId != \"NoPhase\")):\n\t\t\t\t#actual phase must pe activated\n\t\t\t\t#print \"new phase started\"\n\t\t\t\tfinalPathList.append(\"[.]PhaseCalculation\"+activePhaseStringNo+\"/PhaseActivatedByEquipPhase\")\n\t\t\t\tfinalPathList.append(\"[.]PhaseNoToBeCalculated\")\n\t\t\t\tfinalPathList.append(\"[.]ActualActivePhase\")\n\t\t\t\tfinalValueList = [1,actualEquipPhase,actualEquipPhase]\n\t\t\t\tupdateValues = 1\n\t\t\t\t\n\t\t\telif(phaseNumberToBeCalculated>0):\n\t\t\t\t#check if previous phase is still marked as active \n\t\t\t\tif(prePhaseIsActive == 1):\n\t\t\t\t\tprint \"previous phase still active-> to be calculated\"\n\t\t\t\t\t#deactivate previous phase\n\t\t\t\t\tfinalPathList.append(\"[.]PhaseCalculation\"+phaseNumberToBeCalculatedStr+\"/PhaseActivatedByEquipPhase\")\n\t\t\t\t\tfinalPathList.append(\"[.]ActualActivePhase\")\n\t\t\t\t\tfinalPathList.append(\"[.]reqCalculation\")\n\t\t\t\t\tfinalValueList = [0,0,1]\n\t\t\t\t\tupdateValues = 1\n\t\t\t\telse:\n\t\t\t\t\tif(phaseMesId != \"NoPhase\"):\n\t\t\t\t\t\tprint \"previous phase disabled -> activate actual phase\"\n\t\t\t\t\t\t#actual phase must be activated\n\t\t\t\t\t\tfinalPathList.append(\"[.]PhaseCalculation\"+activePhaseStringNo+\"/PhaseActivatedByEquipPhase\")\n\t\t\t\t\t\tfinalPathList.append(\"[.]PhaseNoToBeCalculated\")\n\t\t\t\t\t\tfinalPathList.append(\"[.]ActualActivePhase\")\n\t\t\t\t\t\tfinalValueList = [1,actualEquipPhase,actualEquipPhase]\n\t\t\t\t\t\tupdateValues = 1\n\t\t\t\t\t#else:\n\t\t\t\t\t\t#print \"this phase cannot be activated \"\n\t\t#calculation request is activated\t\n\t\telif ((actualEquipPhase == -1) and (reqCalc == 1)): \n\t\t\t# finalPathList: idx0  = reqCalc tag\n\t\t\tfinalPathList.append(\"[.]reqCalculation\")\n\t\t\tfinalPathList.append(\"[.]ActualActivePhase\")\n\t\t\tfinalPathList.append(\"[.]PhaseNoToBeCalculated\")\n\t\t\t#reset the reqCalc value\n\t\t\tfinalValueList = [0,0,0]\n\t\t\tupdateValues = 1\n\t\t\t#call the function for parameter calculations\n\t\t\t#basePath = tagPath.replace(\"/RecipeCalculation/EquipActivePhaseNo\",\"/\")\n\t\t\t#get the tag's parent tag path - ..../RecipeCalculation\n\t\t\tbasePath = '/'.join(tagPath.split('/')[:-1])\n\t\t\t#get the target equipmnet base path\n\t\t\ttargetEquipBasePath = tag['parameters']['PathToTargetEquip']\n\t\t\t#print \"call calculation  for phase no\"+phaseNumberToBeCalculatedStr\n\t\t\tCriticalParamLib.calculatePhaseResults(basePath,phaseNumberToBeCalculatedStr,targetEquipBasePath,historianName)\n\t\t\n\t\t#phase value is zero \n\t\telif ((actualEquipPhase == 0) and (phaseNumberToBeCalculated>0)): \n\t\t\t#print \"last phase was finished\"\n\t\t\t#check if previous phase is still marked as active \n\t\t\tif(prePhaseIsActive == 1):\n\t\t\t\t#deactivate previous phase\n\t\t\t\tfinalPathList.append(\"[.]PhaseCalculation\"+phaseNumberToBeCalculatedStr+\"/PhaseActivatedByEquipPhase\")\n\t\t\t\t#finalPathList.append(\"[.]PhaseNoToBeCalculated\")\n\t\t\t\tfinalPathList.append(\"[.]reqCalculation\")\n\t\t\t\t#finalValueList = [0,phaseToBeCalculated,1]\n\t\t\t\tfinalValueList = [0,1]\n\t\t\t\tupdateValues = 1\n\t\telse:\n\t\t\t#print \"nothing to do\"\n\t\t\tupdateValues = 0\n\t\tif (updateValues == 1):\n\t\t\tsystem.tag.writeBlocking(finalPathList,finalValueList)\t\t"
                         }
                       ],
                       "executionMode": "EventDriven",
-                      "expression": "if(({[.]RecipeValidatedByMes} \u0026\u0026 !{[.]reqCalculation}),{[.]../../OutputArea/PhaseData/ActivePhaseNumber},-1)",
+                      "expression": "if(({[.]RecipeValidatedByMes} && !{[.]reqCalculation}),{[.]../../OutputArea/PhaseData/ActivePhaseNumber},-1)",
                       "name": "ActivePhaseForCalculations",
                       "opcItemPath": {
                         "bindType": "parameter",
-                        "binding": "nsu\u003dKEPServerEX;s\u003d{EquipPhaseOpcPath}"
+                        "binding": "nsu=KEPServerEX;s={EquipPhaseOpcPath}"
                       },
                       "opcServer": {
                         "bindType": "parameter",
@@ -38501,8 +38506,8 @@
                   "tagType": "UdtType",
                   "tags": [
                     {
-                      "documentation": "indicates the current batch running state; 0 \u003d not started; 1 \u003d started",
-                      "expression": "if({[.]../PhaseCalculation/PhaseNoForrecipe} \u003e0 \u0026\u0026 {[.]../../OutputArea/EquipmentState/EquipmentState}\u003d\"Running\",1,0)",
+                      "documentation": "indicates the current batch running state; 0 = not started; 1 = started",
+                      "expression": "if({[.]../PhaseCalculation/PhaseNoForrecipe} >0 && {[.]../../OutputArea/EquipmentState/EquipmentState}=\"Running\",1,0)",
                       "name": "BatchCurrentState",
                       "tagGroup": "GroupSlow",
                       "tagType": "AtomicTag",
@@ -38646,7 +38651,7 @@
                     },
                     {
                       "documentation": "calculated phase number to be used by the recipe calculation execution",
-                      "expression": "if({[.]../../OutputArea/EquipmentState/EquipmentState} \u003d \"Running\",if(({PhaseDetectedByValue} \u0026\u0026 !{PhaseDetectedByBit}),{[.]PhaseValFromInteger},if(!{PhaseDetectedByValue} \u0026\u0026 {PhaseDetectedByBit},{[.]PhaseValFromSingleTags},0)),0)",
+                      "expression": "if({[.]../../OutputArea/EquipmentState/EquipmentState} = \"Running\",if(({PhaseDetectedByValue} && !{PhaseDetectedByBit}),{[.]PhaseValFromInteger},if(!{PhaseDetectedByValue} && {PhaseDetectedByBit},{[.]PhaseValFromSingleTags},0)),0)",
                       "name": "PhaseNoForRecipe",
                       "tagGroup": "GroupFast",
                       "tagType": "AtomicTag",
@@ -38655,7 +38660,7 @@
                   ]
                 },
                 {
-                  "documentation": "Implements the calculation logic for a single parameter; the real values are dynamically copied from the equipment\u0027s ProcessValues area based on the MES calcualtion request; the value which stores the historical data is FilteredRealValue",
+                  "documentation": "Implements the calculation logic for a single parameter; the real values are dynamically copied from the equipment's ProcessValues area based on the MES calcualtion request; the value which stores the historical data is FilteredRealValue",
                   "name": "ParameterCalculation",
                   "parameters": {
                     "HistorianName": {
@@ -38670,8 +38675,8 @@
                   "tags": [
                     {
                       "dataType": "Boolean",
-                      "documentation": "Used to enable or disable the process value data historization;  it is written to TRUE when the equipment\u0027s process value passes for the first time the threshold value (MesThreshold) received from MES",
-                      "expression": "if({[.]ParamIsActive} \u0026\u0026 {[.]../PhaseActive} \u0026\u0026 {[.]../../RecipeEnabledToExecute} \u0026\u0026 (({[.]RealValueFromEquip}\u003e\u003d{[.]MesThreshold}) || {[.]ActivateThreshold}),1,0)   \r\n",
+                      "documentation": "Used to enable or disable the process value data historization;  it is written to TRUE when the equipment's process value passes for the first time the threshold value (MesThreshold) received from MES",
+                      "expression": "if({[.]ParamIsActive} && {[.]../PhaseActive} && {[.]../../RecipeEnabledToExecute} && (({[.]RealValueFromEquip}>={[.]MesThreshold}) || {[.]ActivateThreshold}),1,0)   \r\n",
                       "name": "ActivateThreshold",
                       "tagGroup": "GroupFast",
                       "tagType": "AtomicTag",
@@ -38679,8 +38684,8 @@
                     },
                     {
                       "dataType": "Float4",
-                      "documentation": "retrieves the equipmnet\u0027s process value based on the dynamically build tag path ",
-                      "expression": "if(({[.]ParamIsActive} \u0026\u0026 ({[.]SensorTagPath} !\u003d \u0027None\u0027)),tag({[.]SensorTagPath}),0)",
+                      "documentation": "retrieves the equipmnet's process value based on the dynamically build tag path ",
+                      "expression": "if(({[.]ParamIsActive} && ({[.]SensorTagPath} != 'None')),tag({[.]SensorTagPath}),0)",
                       "historyEnabled": false,
                       "historyProvider": "LocalHistorian",
                       "name": "RealValueFromEquip",
@@ -38703,7 +38708,7 @@
                     {
                       "dataType": "Float4",
                       "documentation": "The historized process value; the historization logic is dependent on the values of the tags ActivateThreshold and ContinousStoring",
-                      "expression": "if({[.]ParamIsActive} \u0026\u0026 {[.]../PhaseActive} \u0026\u0026 {[.]../../RecipeEnabledToExecute},if(!({[.]ActivateThreshold}\u003d1),{[.]FilteredRealValue},{[.]RealValueFromEquip}),{[.]FilteredRealValue})\r\n\r\n",
+                      "expression": "if({[.]ParamIsActive} && {[.]../PhaseActive} && {[.]../../RecipeEnabledToExecute},if(!({[.]ActivateThreshold}=1),{[.]FilteredRealValue},{[.]RealValueFromEquip}),{[.]FilteredRealValue})\r\n\r\n",
                       "historicalDeadbandStyle": "Discrete",
                       "historyEnabled": true,
                       "historyProvider": {
@@ -38736,7 +38741,7 @@
                     },
                     {
                       "dataType": "String",
-                      "documentation": "the tag path value to the process value\u0027current value member to which the parameter is linked ",
+                      "documentation": "the tag path value to the process value'current value member to which the parameter is linked ",
                       "expression": "lookup({[.]../../ProcessValuesDataset},{[.]MesParamID},\"None\",\"ParameterName\",\"CurrentValuePath\")",
                       "name": "SensorTagPath",
                       "tagGroup": "GroupSlow",
@@ -38746,7 +38751,7 @@
                     },
                     {
                       "dataType": "Boolean",
-                      "documentation": "Indicates if the parameter is active (calculation are performed for the coresponding phase)\nTrue \u003d Calculations are performed\nFalse \u003d Calcualations are not performed",
+                      "documentation": "Indicates if the parameter is active (calculation are performed for the coresponding phase)\nTrue = Calculations are performed\nFalse = Calcualations are not performed",
                       "name": "ParamIsActive",
                       "tagGroup": "GroupFast",
                       "tagType": "AtomicTag",
@@ -39410,7 +39415,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d str(tag[\u0027parameters\u0027][\u0027EquipmentName\u0027])\n\t\tsavePath\u003d str(tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027])\n\t\t#call the function for storing in a csv file the actual value of the phases dictionary\n\t\tGeneralFunctions.storePhaseDatasetToCsv(tagPath, equipName, savePath)\t"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = str(tag['parameters']['EquipmentName'])\n\t\tsavePath= str(tag['parameters']['ParentSavePath'])\n\t\t#call the function for storing in a csv file the actual value of the phases dictionary\n\t\tGeneralFunctions.storePhaseDatasetToCsv(tagPath, equipName, savePath)\t"
                             }
                           ],
                           "name": "SavePhaseDataset",
@@ -39421,11 +39426,11 @@
                         },
                         {
                           "dataType": "Boolean",
-                          "documentation": "saves all opc tag\u0027s paths into a csv file so they can be later restored",
+                          "documentation": "saves all opc tag's paths into a csv file so they can be later restored",
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d str(tag[\u0027parameters\u0027][\u0027EquipmentName\u0027])\n\t\tsavePath \u003d str(tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027])\n\t\t#equipBasePath \u003d tag[\u0027parameters\u0027][\u0027PathToTargetEquip\u0027]\n\t\t#call the function for creating the csv file which contains all the tag opc paths\n\t\tGeneralFunctions.storeTagOpcPathsToCsv(tagPath, equipName, savePath)\t\t"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = str(tag['parameters']['EquipmentName'])\n\t\tsavePath = str(tag['parameters']['ParentSavePath'])\n\t\t#equipBasePath = tag['parameters']['PathToTargetEquip']\n\t\t#call the function for creating the csv file which contains all the tag opc paths\n\t\tGeneralFunctions.storeTagOpcPathsToCsv(tagPath, equipName, savePath)\t\t"
                             }
                           ],
                           "name": "SaveOpcPaths",
@@ -39440,7 +39445,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d str(tag[\u0027parameters\u0027][\u0027EquipmentName\u0027])\n\t\tsavePath\u003d str(tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027])\n\t\t#call the function for storing in a csv file the actual value of the phases dictionary\n\t\t#GeneralFunctions.storeStateDatasetToCsv(tagPath, equipName, savePath)\t\n\t\tGeneralFunctions.storeOperationModeDatasetToCsv(tagPath, equipName, savePath)\t"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = str(tag['parameters']['EquipmentName'])\n\t\tsavePath= str(tag['parameters']['ParentSavePath'])\n\t\t#call the function for storing in a csv file the actual value of the phases dictionary\n\t\t#GeneralFunctions.storeStateDatasetToCsv(tagPath, equipName, savePath)\t\n\t\tGeneralFunctions.storeOperationModeDatasetToCsv(tagPath, equipName, savePath)\t"
                             }
                           ],
                           "name": "SaveOperationModeDataset",
@@ -39455,7 +39460,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d str(tag[\u0027parameters\u0027][\u0027EquipmentName\u0027])\n\t\tsavePath\u003d str(tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027])\n\t\t#call the function for storing in a csv file the actual value of the phases dictionary\n\t\t#GeneralFunctions.storeStateDatasetToCsv(tagPath, equipName, savePath)\t\n\t\tGeneralFunctions.storeEquipmentStateDatasetToCsv(tagPath, equipName, savePath)\t"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = str(tag['parameters']['EquipmentName'])\n\t\tsavePath= str(tag['parameters']['ParentSavePath'])\n\t\t#call the function for storing in a csv file the actual value of the phases dictionary\n\t\t#GeneralFunctions.storeStateDatasetToCsv(tagPath, equipName, savePath)\t\n\t\tGeneralFunctions.storeEquipmentStateDatasetToCsv(tagPath, equipName, savePath)\t"
                             }
                           ],
                           "name": "SaveEquipmentStateDataset",
@@ -39478,7 +39483,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d str(tag[\u0027parameters\u0027][\u0027EquipmentName\u0027])\n\t\tsavePath\u003d str(tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027])\n\t\t#call the function for restoring from a csv file the value of the phases dictionary\n\t\tGeneralFunctions.restoreEquipmentStateDatasetFromCsv(tagPath, equipName, savePath)\t"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = str(tag['parameters']['EquipmentName'])\n\t\tsavePath= str(tag['parameters']['ParentSavePath'])\n\t\t#call the function for restoring from a csv file the value of the phases dictionary\n\t\tGeneralFunctions.restoreEquipmentStateDatasetFromCsv(tagPath, equipName, savePath)\t"
                             }
                           ],
                           "name": "RestoreEquipmentStateDataset",
@@ -39489,11 +39494,11 @@
                         },
                         {
                           "dataType": "Boolean",
-                          "documentation": "saves all opc tag\u0027s paths into a csv file so they can be later restored",
+                          "documentation": "saves all opc tag's paths into a csv file so they can be later restored",
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d str(tag[\u0027parameters\u0027][\u0027EquipmentName\u0027])\n\t\tsavePath \u003d str(tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027])\n\t\t#call the function for creating the csv tag list\n\t\tGeneralFunctions.storeTagDataToCsv(tagPath, equipName, savePath, 5)\n\t\t"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = str(tag['parameters']['EquipmentName'])\n\t\tsavePath = str(tag['parameters']['ParentSavePath'])\n\t\t#call the function for creating the csv tag list\n\t\tGeneralFunctions.storeTagDataToCsv(tagPath, equipName, savePath, 5)\n\t\t"
                             }
                           ],
                           "name": "generateTagListFile",
@@ -39508,7 +39513,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d str(tag[\u0027parameters\u0027][\u0027EquipmentName\u0027])\n\t\tsavePath\u003d str(tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027])\n\t\t#call the function for restoring from a csv file the value of the phases dictionary\n\t\tGeneralFunctions.restorePhaseDatasetFromCsv(tagPath, equipName, savePath)\t"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = str(tag['parameters']['EquipmentName'])\n\t\tsavePath= str(tag['parameters']['ParentSavePath'])\n\t\t#call the function for restoring from a csv file the value of the phases dictionary\n\t\tGeneralFunctions.restorePhaseDatasetFromCsv(tagPath, equipName, savePath)\t"
                             }
                           ],
                           "name": "RestorePhaseDataset",
@@ -39523,7 +39528,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value and not previousValue.value:\n\t\tequipBasePath \u003d tag[\u0027parameters\u0027][\u0027PathToTargetEquip\u0027]\n\t\tCriticalParamLib.generateProcessValuesDataset(equipBasePath,tagPath,6)"
+                              "script": "\tif not initialChange and currentValue.value and not previousValue.value:\n\t\tequipBasePath = tag['parameters']['PathToTargetEquip']\n\t\tCriticalParamLib.generateProcessValuesDataset(equipBasePath,tagPath,6)"
                             }
                           ],
                           "name": "GenerateProcValuesDataset",
@@ -39546,7 +39551,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d tag[\u0027parameters\u0027][\u0027EquipmentName\u0027]\n\t\tsavePath\u003d tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027]\n\t\t#call the function for restoring the tags opc paths from the previously generated csv file\n\t\tGeneralFunctions.restoreTagOpcPathsFromCsv(tagPath, equipName, savePath)\n"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = tag['parameters']['EquipmentName']\n\t\tsavePath= tag['parameters']['ParentSavePath']\n\t\t#call the function for restoring the tags opc paths from the previously generated csv file\n\t\tGeneralFunctions.restoreTagOpcPathsFromCsv(tagPath, equipName, savePath)\n"
                             }
                           ],
                           "name": "RestoreOpcPaths",
@@ -39561,7 +39566,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d str(tag[\u0027parameters\u0027][\u0027EquipmentName\u0027])\n\t\tsavePath\u003d str(tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027])\n\t\t#call the function for restoring from a csv file the value of the phases dictionary\n\t\tGeneralFunctions.restoreOperationModeDatasetFromCsv(tagPath, equipName, savePath)\t"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = str(tag['parameters']['EquipmentName'])\n\t\tsavePath= str(tag['parameters']['ParentSavePath'])\n\t\t#call the function for restoring from a csv file the value of the phases dictionary\n\t\tGeneralFunctions.restoreOperationModeDatasetFromCsv(tagPath, equipName, savePath)\t"
                             }
                           ],
                           "name": "RestoreOperationModeDataset ",
@@ -39576,7 +39581,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value \u003d\u003d True and previousValue.value \u003d\u003d False:\n\t\tphaseNo \u003d CriticalParamLib.recipePhaseNo\n\t\tparamNo \u003d CriticalParamLib.phaseParamNo \n\t\ttargetEquipBasePath \u003d tag[\u0027parameters\u0027][\u0027PathToTargetEquip\u0027]\n\t\t#call the script for reseting all the critical calculations results \n\t\tCriticalParamLib.resetCriticalParamResults(targetEquipBasePath,phaseNo,paramNo)\n\t\tsystem.tag.writeBlocking(tagPath, False)"
+                              "script": "\tif not initialChange and currentValue.value == True and previousValue.value == False:\n\t\tphaseNo = CriticalParamLib.recipePhaseNo\n\t\tparamNo = CriticalParamLib.phaseParamNo \n\t\ttargetEquipBasePath = tag['parameters']['PathToTargetEquip']\n\t\t#call the script for reseting all the critical calculations results \n\t\tCriticalParamLib.resetCriticalParamResults(targetEquipBasePath,phaseNo,paramNo)\n\t\tsystem.tag.writeBlocking(tagPath, False)"
                             }
                           ],
                           "name": "ResetMesResults",
@@ -43520,7 +43525,7 @@
                           "tagType": "Folder",
                           "tags": [
                             {
-                              "documentation": "current working mode on the equipment ( e.g. 0 \u003d stopped; 1 \u003d running ; 2 \u003d stopped; 3 \u003d change over....)",
+                              "documentation": "current working mode on the equipment ( e.g. 0 = stopped; 1 = running ; 2 = stopped; 3 = change over....)",
                               "name": "OperationMode",
                               "readOnly": true,
                               "tagGroup": "GroupSlow",
@@ -43528,7 +43533,7 @@
                               "valueSource": "opc"
                             },
                             {
-                              "documentation": "current working mode on the equipment ( e.g. 0 \u003d stopped; 1 \u003d running ; 2 \u003d stopped; 3 \u003d change over....)",
+                              "documentation": "current working mode on the equipment ( e.g. 0 = stopped; 1 = running ; 2 = stopped; 3 = change over....)",
                               "enabled": true,
                               "name": "EquipmentState",
                               "readOnly": true,
@@ -47513,7 +47518,7 @@
                               "historyProvider": "Edge Historian",
                               "includeMetadata": true,
                               "name": "GoodPartsCounter",
-                              "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]Random/RandomInteger1",
+                              "opcItemPath": "ns=1;s=[Simulator Device]Random/RandomInteger1",
                               "opcServer": "Ignition OPC UA Server",
                               "tagGroup": "Default Historical",
                               "tagType": "AtomicTag",
@@ -47528,7 +47533,7 @@
                               "historyProvider": "Edge Historian",
                               "includeMetadata": true,
                               "name": "RejectedPartsCounter",
-                              "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]ReadOnly/ReadOnlyInteger1",
+                              "opcItemPath": "ns=1;s=[Simulator Device]ReadOnly/ReadOnlyInteger1",
                               "opcServer": "Ignition OPC UA Server",
                               "tagGroup": "Default Historical",
                               "tagType": "AtomicTag",
@@ -47544,7 +47549,7 @@
                               "historyProvider": "Edge Historian",
                               "includeMetadata": true,
                               "name": "OperationMode",
-                              "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]Random/RandomInteger2",
+                              "opcItemPath": "ns=1;s=[Simulator Device]Random/RandomInteger2",
                               "opcServer": "Ignition OPC UA Server",
                               "tagGroup": "Default Historical",
                               "tagType": "AtomicTag",
@@ -47592,7 +47597,7 @@
                               "historyProvider": "Edge Historian",
                               "includeMetadata": true,
                               "name": "OperationMode",
-                              "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]Random/RandomInteger2",
+                              "opcItemPath": "ns=1;s=[Simulator Device]Random/RandomInteger2",
                               "opcServer": "Ignition OPC UA Server",
                               "tagGroup": "Default Historical",
                               "tagType": "AtomicTag",
@@ -47607,7 +47612,7 @@
                               "historyProvider": "Edge Historian",
                               "includeMetadata": true,
                               "name": "RejectedPartsCounter",
-                              "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]ReadOnly/ReadOnlyInteger1",
+                              "opcItemPath": "ns=1;s=[Simulator Device]ReadOnly/ReadOnlyInteger1",
                               "opcServer": "Ignition OPC UA Server",
                               "tagGroup": "Default Historical",
                               "tagType": "AtomicTag",
@@ -47622,7 +47627,7 @@
                               "historyProvider": "Edge Historian",
                               "includeMetadata": true,
                               "name": "GoodPartsCounter",
-                              "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]Random/RandomInteger1",
+                              "opcItemPath": "ns=1;s=[Simulator Device]Random/RandomInteger1",
                               "opcServer": "Ignition OPC UA Server",
                               "tagGroup": "Default Historical",
                               "tagType": "AtomicTag",
@@ -47643,7 +47648,7 @@
                           "documentation": "general description about the equipment",
                           "expression": "tag({PathToCalcArea}+\"/OutputArea/EquipmentInfo/\"+\"/\"+{TagName})",
                           "name": "Description",
-                          "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]ReadOnly/ReadOnlyString1",
+                          "opcItemPath": "ns=1;s=[Simulator Device]ReadOnly/ReadOnlyString1",
                           "opcServer": "Ignition OPC UA Server",
                           "tagGroup": "Default Historical",
                           "tagType": "AtomicTag",
@@ -47652,7 +47657,7 @@
                         {
                           "dataType": "Int8",
                           "name": "MachineCode",
-                          "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]Random/RandomLong1",
+                          "opcItemPath": "ns=1;s=[Simulator Device]Random/RandomLong1",
                           "opcServer": "Ignition OPC UA Server",
                           "tagGroup": "Default Historical",
                           "tagType": "AtomicTag",
@@ -47663,7 +47668,7 @@
                           "documentation": "equipment manufacturer name ",
                           "expression": "tag({PathToCalcArea}+\"/OutputArea/EquipmentInfo/\"+\"/\"+{TagName})",
                           "name": "Manufacturer",
-                          "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]ReadOnly/ReadOnlyString2",
+                          "opcItemPath": "ns=1;s=[Simulator Device]ReadOnly/ReadOnlyString2",
                           "opcServer": "Ignition OPC UA Server",
                           "tagGroup": "Default Historical",
                           "tagType": "AtomicTag",
@@ -47707,7 +47712,7 @@
                               "historyProvider": "Edge Historian",
                               "includeMetadata": true,
                               "name": "OperationMode",
-                              "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]Random/RandomInteger2",
+                              "opcItemPath": "ns=1;s=[Simulator Device]Random/RandomInteger2",
                               "opcServer": "Ignition OPC UA Server",
                               "tagGroup": "Default Historical",
                               "tagType": "AtomicTag",
@@ -48280,8 +48285,8 @@
                   "tagType": "UdtType",
                   "tags": [
                     {
-                      "documentation": "indicates the current batch running state; 0 \u003d not started; 1 \u003d started",
-                      "expression": "if({[.]../PhaseCalculation/PhaseNoForrecipe} \u003e0 \u0026\u0026 {[.]../../OutputArea/EquipmentState/EquipmentState}\u003d\"Running\",1,0)",
+                      "documentation": "indicates the current batch running state; 0 = not started; 1 = started",
+                      "expression": "if({[.]../PhaseCalculation/PhaseNoForrecipe} >0 && {[.]../../OutputArea/EquipmentState/EquipmentState}=\"Running\",1,0)",
                       "name": "BatchCurrentState",
                       "tagGroup": "GroupSlow",
                       "tagType": "AtomicTag",
@@ -48426,14 +48431,14 @@
                     },
                     {
                       "dataType": "Boolean",
-                      "documentation": "signalizes  the phase\u0027s activate state based on the MES input ",
+                      "documentation": "signalizes  the phase's activate state based on the MES input ",
                       "eventScripts": [
                         {
                           "eventid": "valueChanged",
-                          "script": "\ttargetEquipBasePath \u003d tag[\u0027parameters\u0027][\u0027PathToTargetEquip\u0027]\n\tphaseNo \u003d tag[\u0027parameters\u0027][\u0027PhaseNo\u0027]\n\t#build the string to be used in the tag path logic\n\tphaseNoStr \u003d \"{:02}\".format(phaseNo)\n\t#read the tag\u0027s parameter values\n\tif not initialChange and currentValue.value \u003d\u003d True and previousValue.value \u003d\u003d False:\n\t\t#phase was just activated\n\t\t#store the start time\n\t\tsystem.tag.writeBlocking(\"[.]StartTimeStamp\", currentValue.timestamp)\n\t\t#assume, at phase start, that the data will be valid; write the DataIsValid to 1\n\t\t#system.tag.writeBlocking(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/DataIsValid\",1)\n\telif not initialChange and currentValue.value \u003d\u003d False and previousValue.value \u003d\u003d True:\n\t\ttagPaths \u003d[]\n\t\tvalues \u003d []\n\t\t#phase was just deactivated\n\t\t#store the end time\n\t\tendTimePhase\u003dsystem.date.now()\n\t\tsystem.tag.writeBlocking(\"[.]EndTimeStamp\",endTimePhase)\n\t\t#read the phase\u0027s start time + the DataIsValid tag value from the MARS results area\n\t\ttagPaths+\u003d[\"[.]StartTimeStamp\",targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/DataIsValid\"]\n\t\t#read the start and end timestamps for the requested phase\n\t\tvalues \u003d system.tag.readBlocking(tagPaths)\n\t\tstartTimePhase \u003d values[0].value\n\t\tdataValid \u003d values[1].value\n\t\t#verifies if the DataIsValid has the initial value since the since the batch was started\n\t\tif (dataValid \u003d\u003d 0):\n\t\t\t#no disconection was detected -\u003e mark the results as valid\n\t\t\tdataValid \u003d 1\n\t\t#calculate the total phase duration\n\t\tphaseDuration \u003d system.date.secondsBetween(startTimePhase, endTimePhase)\n\t\t#get the target equipmnet base path\n\t\ttagPaths \u003d[]\n\t\tvalues \u003d []\n\t\t#write the start and end time to the final results area\n\t\ttagPaths.append(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/StartTimestamp\")\n\t\ttagPaths.append(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/EndTimestamp\")\n\t\ttagPaths.append(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/PhaseDuration\")\n\t\ttagPaths.append(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/DataIsValid\")\n\t\t#dateFormat({[.]End_Timestamp_DateTime},\"yyyy-MM-dd HH:mm:ss\")\n\t\tvalues.append(system.date.format(startTimePhase,\"yyyy-MM-dd HH:mm:ss\"))\n\t\tvalues.append(system.date.format(endTimePhase,\"yyyy-MM-dd HH:mm:ss\"))\n\t\tvalues.append(phaseDuration)\n\t\tvalues.append(dataValid)\n\t\tsystem.tag.writeBlocking(tagPaths,values)"
+                          "script": "\ttargetEquipBasePath = tag['parameters']['PathToTargetEquip']\n\tphaseNo = tag['parameters']['PhaseNo']\n\t#build the string to be used in the tag path logic\n\tphaseNoStr = \"{:02}\".format(phaseNo)\n\t#read the tag's parameter values\n\tif not initialChange and currentValue.value == True and previousValue.value == False:\n\t\t#phase was just activated\n\t\t#store the start time\n\t\tsystem.tag.writeBlocking(\"[.]StartTimeStamp\", currentValue.timestamp)\n\t\t#assume, at phase start, that the data will be valid; write the DataIsValid to 1\n\t\t#system.tag.writeBlocking(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/DataIsValid\",1)\n\telif not initialChange and currentValue.value == False and previousValue.value == True:\n\t\ttagPaths =[]\n\t\tvalues = []\n\t\t#phase was just deactivated\n\t\t#store the end time\n\t\tendTimePhase=system.date.now()\n\t\tsystem.tag.writeBlocking(\"[.]EndTimeStamp\",endTimePhase)\n\t\t#read the phase's start time + the DataIsValid tag value from the MARS results area\n\t\ttagPaths+=[\"[.]StartTimeStamp\",targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/DataIsValid\"]\n\t\t#read the start and end timestamps for the requested phase\n\t\tvalues = system.tag.readBlocking(tagPaths)\n\t\tstartTimePhase = values[0].value\n\t\tdataValid = values[1].value\n\t\t#verifies if the DataIsValid has the initial value since the since the batch was started\n\t\tif (dataValid == 0):\n\t\t\t#no disconection was detected -> mark the results as valid\n\t\t\tdataValid = 1\n\t\t#calculate the total phase duration\n\t\tphaseDuration = system.date.secondsBetween(startTimePhase, endTimePhase)\n\t\t#get the target equipmnet base path\n\t\ttagPaths =[]\n\t\tvalues = []\n\t\t#write the start and end time to the final results area\n\t\ttagPaths.append(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/StartTimestamp\")\n\t\ttagPaths.append(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/EndTimestamp\")\n\t\ttagPaths.append(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/PhaseDuration\")\n\t\ttagPaths.append(targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/DataIsValid\")\n\t\t#dateFormat({[.]End_Timestamp_DateTime},\"yyyy-MM-dd HH:mm:ss\")\n\t\tvalues.append(system.date.format(startTimePhase,\"yyyy-MM-dd HH:mm:ss\"))\n\t\tvalues.append(system.date.format(endTimePhase,\"yyyy-MM-dd HH:mm:ss\"))\n\t\tvalues.append(phaseDuration)\n\t\tvalues.append(dataValid)\n\t\tsystem.tag.writeBlocking(tagPaths,values)"
                         }
                       ],
-                      "expression": "if(({[.]../RecipeValidatedByMes} \u0026\u0026 {[.]MesPhaseID}!\u003d\"NoPhase\" \u0026\u0026 len({[.]MesPhaseID})\u003e0),{[.]PhaseActivatedByEquipPhase},0)",
+                      "expression": "if(({[.]../RecipeValidatedByMes} && {[.]MesPhaseID}!=\"NoPhase\" && len({[.]MesPhaseID})>0),{[.]PhaseActivatedByEquipPhase},0)",
                       "name": "PhaseActive",
                       "tagGroup": "GroupFast",
                       "tagType": "AtomicTag",
@@ -48504,14 +48509,14 @@
                       "valueSource": "memory"
                     },
                     {
-                      "documentation": "monitors the phase active state and the equipment connection state; if equipment disconnects while the phase is active than the tag\u0027s value is changed to 1",
+                      "documentation": "monitors the phase active state and the equipment connection state; if equipment disconnects while the phase is active than the tag's value is changed to 1",
                       "eventScripts": [
                         {
                           "eventid": "valueChanged",
-                          "script": "\tif not initialChange and (currentValue.value \u003d\u003d 1):\n\t\ttargetEquipBasePath \u003d tag[\u0027parameters\u0027][\u0027PathToTargetEquip\u0027]\n\t\tPhaseNo \u003d tag[\u0027parameters\u0027][\u0027PhaseNo\u0027]\n\t\tphaseNoStr \u003d \"{:02}\".format(PhaseNo)\n\t\tsystem.tag.writeBlocking([targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/DataIsValid\"],[-1])\n"
+                          "script": "\tif not initialChange and (currentValue.value == 1):\n\t\ttargetEquipBasePath = tag['parameters']['PathToTargetEquip']\n\t\tPhaseNo = tag['parameters']['PhaseNo']\n\t\tphaseNoStr = \"{:02}\".format(PhaseNo)\n\t\tsystem.tag.writeBlocking([targetEquipBasePath+\"/MESData/CalculationResults/Phase\"+phaseNoStr+\"/DataIsValid\"],[-1])\n"
                         }
                       ],
-                      "expression": "if(\r\n  {[.]PhaseActive} \u0026\u0026\r\n  (lower({[.]../../../OutputArea/EquipmentState/NetworkConnectionStatus}) !\u003d \"connected\" \u0026\u0026\r\n   lower({[.]../../../OutputArea/EquipmentState/NetworkConnectionStatus}) !\u003d \"running\"),\r\n  1,\r\n  0\r\n)\r\n\r\n",
+                      "expression": "if(\r\n  {[.]PhaseActive} &&\r\n  (lower({[.]../../../OutputArea/EquipmentState/NetworkConnectionStatus}) != \"connected\" &&\r\n   lower({[.]../../../OutputArea/EquipmentState/NetworkConnectionStatus}) != \"running\"),\r\n  1,\r\n  0\r\n)\r\n\r\n",
                       "name": "EquipDisconnectionDetected",
                       "tagGroup": "GroupSlow",
                       "tagType": "AtomicTag",
@@ -48813,7 +48818,7 @@
                     },
                     {
                       "documentation": "calculated phase number to be used by the recipe calculation execution",
-                      "expression": "if({[.]../../OutputArea/EquipmentState/EquipmentState} \u003d \"Running\",if(({PhaseDetectedByValue} \u0026\u0026 !{PhaseDetectedByBit}),{[.]PhaseValFromInteger},if(!{PhaseDetectedByValue} \u0026\u0026 {PhaseDetectedByBit},{[.]PhaseValFromSingleTags},0)),0)",
+                      "expression": "if({[.]../../OutputArea/EquipmentState/EquipmentState} = \"Running\",if(({PhaseDetectedByValue} && !{PhaseDetectedByBit}),{[.]PhaseValFromInteger},if(!{PhaseDetectedByValue} && {PhaseDetectedByBit},{[.]PhaseValFromSingleTags},0)),0)",
                       "name": "PhaseNoForRecipe",
                       "tagGroup": "GroupFast",
                       "tagType": "AtomicTag",
@@ -48822,7 +48827,7 @@
                   ]
                 },
                 {
-                  "documentation": "Implements the calculation logic for a single parameter; the real values are dynamically copied from the equipment\u0027s ProcessValues area based on the MES calcualtion request; the value which stores the historical data is FilteredRealValue",
+                  "documentation": "Implements the calculation logic for a single parameter; the real values are dynamically copied from the equipment's ProcessValues area based on the MES calcualtion request; the value which stores the historical data is FilteredRealValue",
                   "name": "ParameterCalculation",
                   "parameters": {
                     "HistorianName": {
@@ -48837,8 +48842,8 @@
                   "tags": [
                     {
                       "dataType": "Float4",
-                      "documentation": "retrieves the equipmnet\u0027s process value based on the dynamically build tag path ",
-                      "expression": "if(({[.]ParamIsActive} \u0026\u0026 ({[.]SensorTagPath} !\u003d \u0027None\u0027)),tag({[.]SensorTagPath}),0)",
+                      "documentation": "retrieves the equipmnet's process value based on the dynamically build tag path ",
+                      "expression": "if(({[.]ParamIsActive} && ({[.]SensorTagPath} != 'None')),tag({[.]SensorTagPath}),0)",
                       "historyEnabled": false,
                       "historyProvider": "LocalHistorian",
                       "name": "RealValueFromEquip",
@@ -48860,8 +48865,8 @@
                     },
                     {
                       "dataType": "Boolean",
-                      "documentation": "Used to enable or disable the process value data historization;  it is written to TRUE when the equipment\u0027s process value passes for the first time the threshold value (MesThreshold) received from MES",
-                      "expression": "if({[.]ParamIsActive} \u0026\u0026 {[.]../PhaseActive} \u0026\u0026 {[.]../../RecipeEnabledToExecute} \u0026\u0026 (({[.]RealValueFromEquip}\u003e\u003d{[.]MesThreshold}) || {[.]ActivateThreshold}),1,0)   \r\n",
+                      "documentation": "Used to enable or disable the process value data historization;  it is written to TRUE when the equipment's process value passes for the first time the threshold value (MesThreshold) received from MES",
+                      "expression": "if({[.]ParamIsActive} && {[.]../PhaseActive} && {[.]../../RecipeEnabledToExecute} && (({[.]RealValueFromEquip}>={[.]MesThreshold}) || {[.]ActivateThreshold}),1,0)   \r\n",
                       "name": "ActivateThreshold",
                       "tagGroup": "GroupFast",
                       "tagType": "AtomicTag",
@@ -48869,7 +48874,7 @@
                     },
                     {
                       "dataType": "String",
-                      "documentation": "the tag path value to the process value\u0027current value member to which the parameter is linked ",
+                      "documentation": "the tag path value to the process value'current value member to which the parameter is linked ",
                       "expression": "lookup({[.]../../ProcessValuesDataset},{[.]MesParamID},\"None\",\"ParameterName\",\"CurrentValuePath\")",
                       "name": "SensorTagPath",
                       "tagGroup": "GroupSlow",
@@ -48888,7 +48893,7 @@
                     },
                     {
                       "dataType": "Boolean",
-                      "documentation": "Indicates if the parameter is active (calculation are performed for the coresponding phase)\nTrue \u003d Calculations are performed\nFalse \u003d Calcualations are not performed",
+                      "documentation": "Indicates if the parameter is active (calculation are performed for the coresponding phase)\nTrue = Calculations are performed\nFalse = Calcualations are not performed",
                       "name": "ParamIsActive",
                       "tagGroup": "GroupFast",
                       "tagType": "AtomicTag",
@@ -48898,7 +48903,7 @@
                     {
                       "dataType": "Float4",
                       "documentation": "The historized process value; the historization logic is dependent on the values of the tags ActivateThreshold and ContinousStoring",
-                      "expression": "if({[.]ParamIsActive} \u0026\u0026 {[.]../PhaseActive} \u0026\u0026 {[.]../../RecipeEnabledToExecute},if(!({[.]ActivateThreshold}\u003d1),{[.]FilteredRealValue},{[.]RealValueFromEquip}),{[.]FilteredRealValue})\r\n\r\n",
+                      "expression": "if({[.]ParamIsActive} && {[.]../PhaseActive} && {[.]../../RecipeEnabledToExecute},if(!({[.]ActivateThreshold}=1),{[.]FilteredRealValue},{[.]RealValueFromEquip}),{[.]FilteredRealValue})\r\n\r\n",
                       "historicalDeadbandStyle": "Discrete",
                       "historyEnabled": true,
                       "historyProvider": {
@@ -49438,14 +49443,14 @@
                       "eventScripts": [
                         {
                           "eventid": "valueChanged",
-                          "script": "\tphaseNo \u003d CriticalParamLib.recipePhaseNo\n\tparamNo \u003d CriticalParamLib.phaseParamNo\n\ttargetEquipBasePath \u003d tag[\u0027parameters\u0027][\u0027PathToTargetEquip\u0027]\n\t#logic for the rising edge of the Mes RecipeReleasedForCalculation signal \n\tif not initialChange and (currentValue.value\u003d\u003d1) and (previousValue.value\u003d\u003d0):\n\t\t#reset the recipe calculation flags\n\t\tpathList \u003d [\"[.]ActualActivePhase\",\"[.]PhaseNoToBeCalculated\",\"[.]reqCalculation\",\"[.]CalculatedResultsCounter\",\"[.]NumberOfValidRequestsReceived\"]\n\t\tvalueList \u003d [0,0,0,0,0]\n\t\tsystem.tag.writeBlocking(pathList, valueList)\n\t\t#extract the parent tag path for the current tag (.../RecipeCalculation )\n\t\ttagNameToReplace \u003d  tagPath.split(\"/\")[-1]\n\t\tBasePath \u003d tagPath.replace(\"/\"+tagNameToReplace,\"\")\n\t\t#loop and clear all the calculation data for each phase inside the RecipeCalculation\n\t\t#print \"base path: \"+BasePath \n\t\ti\u003d1\n\t\twhile (i\u003c\u003dphaseNo):\n\t\t\tCriticalParamLib.resetPhaseCalculationAreaData(BasePath,i,paramNo)  \n\t\t\ti+\u003d1\n\t\t#call the function to analyze the MES request\n\t\treqCheckResult \u003d CriticalParamLib.processMesRequest(targetEquipBasePath,BasePath)\n\t\t#write the verification result to the MARS handshake tags\n\t\tsystem.tag.writeBlocking([targetEquipBasePath+\"/MESData/Handshake/RequestIsValid\",targetEquipBasePath+\"/MESData/Handshake/FeedbackOnTheRequest\",\"[.]NumberOfValidRequestsReceived\"],reqCheckResult)\n\t\t#call the script for reseting all the critical calculations results \n\t\tCriticalParamLib.resetCriticalParamResults(targetEquipBasePath,phaseNo,paramNo)\n\t#logic for the falling edge of the Mes RecipeReleasedForCalculation signal \t\n\tif not initialChange and (currentValue.value\u003d\u003d0) and (previousValue.value\u003d\u003d1):\n\t\t#clear the current status of the recipe calculation\n\t\tactivePhase \u003d system.tag.readBlocking(\"[.]ActualActivePhase\")[0].value\n\t\tactivePhaseStr \u003d \"{:02}\".format(activePhase)\n\t\tpaths \u003d []\n\t\tpaths+\u003d[(\"[.]ActualActivePhase\"),\"[.]reqCalculation\",\"[.]PhaseNoToBeCalculated\",\"[.]PhaseCalculation\"+activePhaseStr+\"/PhaseActivatedByEquipPhase\",\"[.]NumberOfValidRequestsReceived\",]\n\t\tvalues \u003d [0,0,0,0,0]\n\t\tsystem.tag.writeBlocking(paths, values)\n\t\t#call the script to reset all the MES calculation requests\n\t\t# !!! MUST BE COMMNETED WHEN TESTING FOR DEBUG\n\t\tCriticalParamLib.resetMesCalculationRequests(targetEquipBasePath,phaseNo)"
+                          "script": "\tphaseNo = CriticalParamLib.recipePhaseNo\n\tparamNo = CriticalParamLib.phaseParamNo\n\ttargetEquipBasePath = tag['parameters']['PathToTargetEquip']\n\t#logic for the rising edge of the Mes RecipeReleasedForCalculation signal \n\tif not initialChange and (currentValue.value==1) and (previousValue.value==0):\n\t\t#reset the recipe calculation flags\n\t\tpathList = [\"[.]ActualActivePhase\",\"[.]PhaseNoToBeCalculated\",\"[.]reqCalculation\",\"[.]CalculatedResultsCounter\",\"[.]NumberOfValidRequestsReceived\"]\n\t\tvalueList = [0,0,0,0,0]\n\t\tsystem.tag.writeBlocking(pathList, valueList)\n\t\t#extract the parent tag path for the current tag (.../RecipeCalculation )\n\t\ttagNameToReplace =  tagPath.split(\"/\")[-1]\n\t\tBasePath = tagPath.replace(\"/\"+tagNameToReplace,\"\")\n\t\t#loop and clear all the calculation data for each phase inside the RecipeCalculation\n\t\t#print \"base path: \"+BasePath \n\t\ti=1\n\t\twhile (i<=phaseNo):\n\t\t\tCriticalParamLib.resetPhaseCalculationAreaData(BasePath,i,paramNo)  \n\t\t\ti+=1\n\t\t#call the function to analyze the MES request\n\t\treqCheckResult = CriticalParamLib.processMesRequest(targetEquipBasePath,BasePath)\n\t\t#write the verification result to the MARS handshake tags\n\t\tsystem.tag.writeBlocking([targetEquipBasePath+\"/MESData/Handshake/RequestIsValid\",targetEquipBasePath+\"/MESData/Handshake/FeedbackOnTheRequest\",\"[.]NumberOfValidRequestsReceived\"],reqCheckResult)\n\t\t#call the script for reseting all the critical calculations results \n\t\tCriticalParamLib.resetCriticalParamResults(targetEquipBasePath,phaseNo,paramNo)\n\t#logic for the falling edge of the Mes RecipeReleasedForCalculation signal \t\n\tif not initialChange and (currentValue.value==0) and (previousValue.value==1):\n\t\t#clear the current status of the recipe calculation\n\t\tactivePhase = system.tag.readBlocking(\"[.]ActualActivePhase\")[0].value\n\t\tactivePhaseStr = \"{:02}\".format(activePhase)\n\t\tpaths = []\n\t\tpaths+=[(\"[.]ActualActivePhase\"),\"[.]reqCalculation\",\"[.]PhaseNoToBeCalculated\",\"[.]PhaseCalculation\"+activePhaseStr+\"/PhaseActivatedByEquipPhase\",\"[.]NumberOfValidRequestsReceived\",]\n\t\tvalues = [0,0,0,0,0]\n\t\tsystem.tag.writeBlocking(paths, values)\n\t\t#call the script to reset all the MES calculation requests\n\t\t# !!! MUST BE COMMNETED WHEN TESTING FOR DEBUG\n\t\tCriticalParamLib.resetMesCalculationRequests(targetEquipBasePath,phaseNo)"
                         }
                       ],
-                      "expression": "if((tag(toString({PathToTargetEquip})+\u0027/MESData/Handshake/RecipeReleasedForCalculation\u0027)\u003d1),1,0)",
+                      "expression": "if((tag(toString({PathToTargetEquip})+'/MESData/Handshake/RecipeReleasedForCalculation')=1),1,0)",
                       "name": "RecipeValidatedByMes",
                       "opcItemPath": {
                         "bindType": "parameter",
-                        "binding": "nsu\u003dKEPServerEX;s\u003d{MesRecipeValidOpcPath}"
+                        "binding": "nsu=KEPServerEX;s={MesRecipeValidOpcPath}"
                       },
                       "opcServer": {
                         "bindType": "parameter",
@@ -49459,7 +49464,7 @@
                     {
                       "dataType": "Boolean",
                       "documentation": "indicates if the recipe calculation logic can be executed based on internal or external conditions: mes validation, equipment state...",
-                      "expression": "if(({[.]RecipeValidatedByMes} \u0026\u0026 {[.]../../OutputArea/EquipmentState/EquipmentState}\u003d\"Running\"),1,0)",
+                      "expression": "if(({[.]RecipeValidatedByMes} && {[.]../../OutputArea/EquipmentState/EquipmentState}=\"Running\"),1,0)",
                       "name": "RecipeEnabledToExecute",
                       "tagGroup": "GroupSlow",
                       "tagType": "AtomicTag",
@@ -50647,7 +50652,7 @@
                     },
                     {
                       "dataType": "DataSet",
-                      "documentation": "for each equipment it contains the process values data used in calculations: process value\u0027s name (ParameterID), current value end setpoint tagpaths,  description and UoM values",
+                      "documentation": "for each equipment it contains the process values data used in calculations: process value's name (ParameterID), current value end setpoint tagpaths,  description and UoM values",
                       "name": "ProcessValuesDataset",
                       "tagGroup": "GroupSlow",
                       "tagType": "AtomicTag",
@@ -50659,15 +50664,15 @@
                       "eventScripts": [
                         {
                           "eventid": "valueChanged",
-                          "script": "\t#detect if equipment has activated any phase number\n\t# !!! The phase number used here is the logical phase number (1-10) !!!\n\thistorianName \u003d tag[\u0027parameters\u0027][\u0027HistorianName\u0027]\n\tif not initialChange:\n\t\tactualEquipPhase \u003d currentValue.value\n\t\t#build the string to be used in the tag path logic\n\t\tactivePhaseStringNo\u003d\"{:02}\".format(actualEquipPhase)\n\t\t#get the previous phase number value \u003d the phase thta just ended and needs calculations\n\t\t#print \"new phase detected with tag value \"+str(actualEquipPhase)\n\t\tphaseNumberToBeCalculated \u003d system.tag.readBlocking([\"[.]PhaseNoToBeCalculated\"])[0].value\n\t\t#build the string to be used in the tag path logic - PhaseNoToBeCalculated\n\t\tphaseNumberToBeCalculatedStr\u003d\"{:02}\".format(phaseNumberToBeCalculated)\n\t\tupdateValues \u003d 0\n\t\tpathList \u003d [\"[.]reqCalculation\",\"[.]ActualActivePhase\"]\n\t\t#read the PhaseID for ......\n\t\tif(actualEquipPhase\u003e0):\n\t\t\tpathList.append(\"[.]PhaseCalculation\"+activePhaseStringNo+\"/MesPhaseID\")\n\t\t#if there is an previous phase to be calculated then check the phase active state\n\t\tif (phaseNumberToBeCalculated\u003e0):\n\t\t\tpathList.append(\"[.]PhaseCalculation\"+phaseNumberToBeCalculatedStr+\"/PhaseActivatedByEquipPhase\")\n\t\t#read the actual valued of specific tags\n\t\tvalueList \u003d system.tag.readBlocking(pathList)\n\t\treqCalc \u003d valueList[0].value\n\t\t#print(\"reqCalc value: \"+str(reqCalc))\n\t\tactualActivePhase \u003d valueList[1].value\n\t\t#read the phase Mes ID to verify if the phase was requested by MES for calculations \n\t\tphaseMesId \u003d \"NoPhase\"\n\t\tlistIdx \u003d 0\n\t\tif(actualEquipPhase\u003e0):\n\t\t\tphaseMesId \u003d valueList[2].value\n\t\t\tlistIdx\u003d1\n\t\t#get the state for the previous phase (active or inactive)\t\n\t\tprePhaseIsActive \u003d 0\n\t\tif (phaseNumberToBeCalculated\u003e0):\n\t\t\tprePhaseIsActive \u003d valueList[2+listIdx].value\n\t\tfinalPathList \u003d []\n\t\tfinalValueList \u003d []\n\t\t#check if it is a valid phase number and the phase has parameter to be calculated\n\t\tif(actualEquipPhase\u003e0):\n\t\t\tif((phaseNumberToBeCalculated \u003d\u003d 0) and (phaseMesId !\u003d \"NoPhase\")):\n\t\t\t\t#actual phase must pe activated\n\t\t\t\t#print \"new phase started\"\n\t\t\t\tfinalPathList.append(\"[.]PhaseCalculation\"+activePhaseStringNo+\"/PhaseActivatedByEquipPhase\")\n\t\t\t\tfinalPathList.append(\"[.]PhaseNoToBeCalculated\")\n\t\t\t\tfinalPathList.append(\"[.]ActualActivePhase\")\n\t\t\t\tfinalValueList \u003d [1,actualEquipPhase,actualEquipPhase]\n\t\t\t\tupdateValues \u003d 1\n\t\t\t\t\n\t\t\telif(phaseNumberToBeCalculated\u003e0):\n\t\t\t\t#check if previous phase is still marked as active \n\t\t\t\tif(prePhaseIsActive \u003d\u003d 1):\n\t\t\t\t\tprint \"previous phase still active-\u003e to be calculated\"\n\t\t\t\t\t#deactivate previous phase\n\t\t\t\t\tfinalPathList.append(\"[.]PhaseCalculation\"+phaseNumberToBeCalculatedStr+\"/PhaseActivatedByEquipPhase\")\n\t\t\t\t\tfinalPathList.append(\"[.]ActualActivePhase\")\n\t\t\t\t\tfinalPathList.append(\"[.]reqCalculation\")\n\t\t\t\t\tfinalValueList \u003d [0,0,1]\n\t\t\t\t\tupdateValues \u003d 1\n\t\t\t\telse:\n\t\t\t\t\tif(phaseMesId !\u003d \"NoPhase\"):\n\t\t\t\t\t\tprint \"previous phase disabled -\u003e activate actual phase\"\n\t\t\t\t\t\t#actual phase must be activated\n\t\t\t\t\t\tfinalPathList.append(\"[.]PhaseCalculation\"+activePhaseStringNo+\"/PhaseActivatedByEquipPhase\")\n\t\t\t\t\t\tfinalPathList.append(\"[.]PhaseNoToBeCalculated\")\n\t\t\t\t\t\tfinalPathList.append(\"[.]ActualActivePhase\")\n\t\t\t\t\t\tfinalValueList \u003d [1,actualEquipPhase,actualEquipPhase]\n\t\t\t\t\t\tupdateValues \u003d 1\n\t\t\t\t\t#else:\n\t\t\t\t\t\t#print \"this phase cannot be activated \"\n\t\t#calculation request is activated\t\n\t\telif ((actualEquipPhase \u003d\u003d -1) and (reqCalc \u003d\u003d 1)): \n\t\t\t# finalPathList: idx0  \u003d reqCalc tag\n\t\t\tfinalPathList.append(\"[.]reqCalculation\")\n\t\t\tfinalPathList.append(\"[.]ActualActivePhase\")\n\t\t\tfinalPathList.append(\"[.]PhaseNoToBeCalculated\")\n\t\t\t#reset the reqCalc value\n\t\t\tfinalValueList \u003d [0,0,0]\n\t\t\tupdateValues \u003d 1\n\t\t\t#call the function for parameter calculations\n\t\t\t#basePath \u003d tagPath.replace(\"/RecipeCalculation/EquipActivePhaseNo\",\"/\")\n\t\t\t#get the tag\u0027s parent tag path - ..../RecipeCalculation\n\t\t\tbasePath \u003d \u0027/\u0027.join(tagPath.split(\u0027/\u0027)[:-1])\n\t\t\t#get the target equipmnet base path\n\t\t\ttargetEquipBasePath \u003d tag[\u0027parameters\u0027][\u0027PathToTargetEquip\u0027]\n\t\t\t#print \"call calculation  for phase no\"+phaseNumberToBeCalculatedStr\n\t\t\tCriticalParamLib.calculatePhaseResults(basePath,phaseNumberToBeCalculatedStr,targetEquipBasePath,historianName)\n\t\t\n\t\t#phase value is zero \n\t\telif ((actualEquipPhase \u003d\u003d 0) and (phaseNumberToBeCalculated\u003e0)): \n\t\t\t#print \"last phase was finished\"\n\t\t\t#check if previous phase is still marked as active \n\t\t\tif(prePhaseIsActive \u003d\u003d 1):\n\t\t\t\t#deactivate previous phase\n\t\t\t\tfinalPathList.append(\"[.]PhaseCalculation\"+phaseNumberToBeCalculatedStr+\"/PhaseActivatedByEquipPhase\")\n\t\t\t\t#finalPathList.append(\"[.]PhaseNoToBeCalculated\")\n\t\t\t\tfinalPathList.append(\"[.]reqCalculation\")\n\t\t\t\t#finalValueList \u003d [0,phaseToBeCalculated,1]\n\t\t\t\tfinalValueList \u003d [0,1]\n\t\t\t\tupdateValues \u003d 1\n\t\telse:\n\t\t\t#print \"nothing to do\"\n\t\t\tupdateValues \u003d 0\n\t\tif (updateValues \u003d\u003d 1):\n\t\t\tsystem.tag.writeBlocking(finalPathList,finalValueList)\t\t"
+                          "script": "\t#detect if equipment has activated any phase number\n\t# !!! The phase number used here is the logical phase number (1-10) !!!\n\thistorianName = tag['parameters']['HistorianName']\n\tif not initialChange:\n\t\tactualEquipPhase = currentValue.value\n\t\t#build the string to be used in the tag path logic\n\t\tactivePhaseStringNo=\"{:02}\".format(actualEquipPhase)\n\t\t#get the previous phase number value = the phase thta just ended and needs calculations\n\t\t#print \"new phase detected with tag value \"+str(actualEquipPhase)\n\t\tphaseNumberToBeCalculated = system.tag.readBlocking([\"[.]PhaseNoToBeCalculated\"])[0].value\n\t\t#build the string to be used in the tag path logic - PhaseNoToBeCalculated\n\t\tphaseNumberToBeCalculatedStr=\"{:02}\".format(phaseNumberToBeCalculated)\n\t\tupdateValues = 0\n\t\tpathList = [\"[.]reqCalculation\",\"[.]ActualActivePhase\"]\n\t\t#read the PhaseID for ......\n\t\tif(actualEquipPhase>0):\n\t\t\tpathList.append(\"[.]PhaseCalculation\"+activePhaseStringNo+\"/MesPhaseID\")\n\t\t#if there is an previous phase to be calculated then check the phase active state\n\t\tif (phaseNumberToBeCalculated>0):\n\t\t\tpathList.append(\"[.]PhaseCalculation\"+phaseNumberToBeCalculatedStr+\"/PhaseActivatedByEquipPhase\")\n\t\t#read the actual valued of specific tags\n\t\tvalueList = system.tag.readBlocking(pathList)\n\t\treqCalc = valueList[0].value\n\t\t#print(\"reqCalc value: \"+str(reqCalc))\n\t\tactualActivePhase = valueList[1].value\n\t\t#read the phase Mes ID to verify if the phase was requested by MES for calculations \n\t\tphaseMesId = \"NoPhase\"\n\t\tlistIdx = 0\n\t\tif(actualEquipPhase>0):\n\t\t\tphaseMesId = valueList[2].value\n\t\t\tlistIdx=1\n\t\t#get the state for the previous phase (active or inactive)\t\n\t\tprePhaseIsActive = 0\n\t\tif (phaseNumberToBeCalculated>0):\n\t\t\tprePhaseIsActive = valueList[2+listIdx].value\n\t\tfinalPathList = []\n\t\tfinalValueList = []\n\t\t#check if it is a valid phase number and the phase has parameter to be calculated\n\t\tif(actualEquipPhase>0):\n\t\t\tif((phaseNumberToBeCalculated == 0) and (phaseMesId != \"NoPhase\")):\n\t\t\t\t#actual phase must pe activated\n\t\t\t\t#print \"new phase started\"\n\t\t\t\tfinalPathList.append(\"[.]PhaseCalculation\"+activePhaseStringNo+\"/PhaseActivatedByEquipPhase\")\n\t\t\t\tfinalPathList.append(\"[.]PhaseNoToBeCalculated\")\n\t\t\t\tfinalPathList.append(\"[.]ActualActivePhase\")\n\t\t\t\tfinalValueList = [1,actualEquipPhase,actualEquipPhase]\n\t\t\t\tupdateValues = 1\n\t\t\t\t\n\t\t\telif(phaseNumberToBeCalculated>0):\n\t\t\t\t#check if previous phase is still marked as active \n\t\t\t\tif(prePhaseIsActive == 1):\n\t\t\t\t\tprint \"previous phase still active-> to be calculated\"\n\t\t\t\t\t#deactivate previous phase\n\t\t\t\t\tfinalPathList.append(\"[.]PhaseCalculation\"+phaseNumberToBeCalculatedStr+\"/PhaseActivatedByEquipPhase\")\n\t\t\t\t\tfinalPathList.append(\"[.]ActualActivePhase\")\n\t\t\t\t\tfinalPathList.append(\"[.]reqCalculation\")\n\t\t\t\t\tfinalValueList = [0,0,1]\n\t\t\t\t\tupdateValues = 1\n\t\t\t\telse:\n\t\t\t\t\tif(phaseMesId != \"NoPhase\"):\n\t\t\t\t\t\tprint \"previous phase disabled -> activate actual phase\"\n\t\t\t\t\t\t#actual phase must be activated\n\t\t\t\t\t\tfinalPathList.append(\"[.]PhaseCalculation\"+activePhaseStringNo+\"/PhaseActivatedByEquipPhase\")\n\t\t\t\t\t\tfinalPathList.append(\"[.]PhaseNoToBeCalculated\")\n\t\t\t\t\t\tfinalPathList.append(\"[.]ActualActivePhase\")\n\t\t\t\t\t\tfinalValueList = [1,actualEquipPhase,actualEquipPhase]\n\t\t\t\t\t\tupdateValues = 1\n\t\t\t\t\t#else:\n\t\t\t\t\t\t#print \"this phase cannot be activated \"\n\t\t#calculation request is activated\t\n\t\telif ((actualEquipPhase == -1) and (reqCalc == 1)): \n\t\t\t# finalPathList: idx0  = reqCalc tag\n\t\t\tfinalPathList.append(\"[.]reqCalculation\")\n\t\t\tfinalPathList.append(\"[.]ActualActivePhase\")\n\t\t\tfinalPathList.append(\"[.]PhaseNoToBeCalculated\")\n\t\t\t#reset the reqCalc value\n\t\t\tfinalValueList = [0,0,0]\n\t\t\tupdateValues = 1\n\t\t\t#call the function for parameter calculations\n\t\t\t#basePath = tagPath.replace(\"/RecipeCalculation/EquipActivePhaseNo\",\"/\")\n\t\t\t#get the tag's parent tag path - ..../RecipeCalculation\n\t\t\tbasePath = '/'.join(tagPath.split('/')[:-1])\n\t\t\t#get the target equipmnet base path\n\t\t\ttargetEquipBasePath = tag['parameters']['PathToTargetEquip']\n\t\t\t#print \"call calculation  for phase no\"+phaseNumberToBeCalculatedStr\n\t\t\tCriticalParamLib.calculatePhaseResults(basePath,phaseNumberToBeCalculatedStr,targetEquipBasePath,historianName)\n\t\t\n\t\t#phase value is zero \n\t\telif ((actualEquipPhase == 0) and (phaseNumberToBeCalculated>0)): \n\t\t\t#print \"last phase was finished\"\n\t\t\t#check if previous phase is still marked as active \n\t\t\tif(prePhaseIsActive == 1):\n\t\t\t\t#deactivate previous phase\n\t\t\t\tfinalPathList.append(\"[.]PhaseCalculation\"+phaseNumberToBeCalculatedStr+\"/PhaseActivatedByEquipPhase\")\n\t\t\t\t#finalPathList.append(\"[.]PhaseNoToBeCalculated\")\n\t\t\t\tfinalPathList.append(\"[.]reqCalculation\")\n\t\t\t\t#finalValueList = [0,phaseToBeCalculated,1]\n\t\t\t\tfinalValueList = [0,1]\n\t\t\t\tupdateValues = 1\n\t\telse:\n\t\t\t#print \"nothing to do\"\n\t\t\tupdateValues = 0\n\t\tif (updateValues == 1):\n\t\t\tsystem.tag.writeBlocking(finalPathList,finalValueList)\t\t"
                         }
                       ],
                       "executionMode": "EventDriven",
-                      "expression": "if(({[.]RecipeValidatedByMes} \u0026\u0026 !{[.]reqCalculation}),{[.]../../OutputArea/PhaseData/ActivePhaseNumber},-1)",
+                      "expression": "if(({[.]RecipeValidatedByMes} && !{[.]reqCalculation}),{[.]../../OutputArea/PhaseData/ActivePhaseNumber},-1)",
                       "name": "ActivePhaseForCalculations",
                       "opcItemPath": {
                         "bindType": "parameter",
-                        "binding": "nsu\u003dKEPServerEX;s\u003d{EquipPhaseOpcPath}"
+                        "binding": "nsu=KEPServerEX;s={EquipPhaseOpcPath}"
                       },
                       "opcServer": {
                         "bindType": "parameter",
@@ -50688,7 +50693,7 @@
                     },
                     {
                       "documentation": "indicates that the number of calculated results equals the number of requested calculations",
-                      "expression": "if(({[.]NumberOfValidRequestsReceived}\u003e0) \u0026\u0026 {[.]RecipeValidatedByMes} \u0026\u0026 ({[.]NumberOfValidRequestsReceived}-{[.]CalculatedResultsCounter}) \u003c\u003d 0,1,0)",
+                      "expression": "if(({[.]NumberOfValidRequestsReceived}>0) && {[.]RecipeValidatedByMes} && ({[.]NumberOfValidRequestsReceived}-{[.]CalculatedResultsCounter}) <= 0,1,0)",
                       "name": "CalculationResultsAvailable",
                       "tagGroup": "GroupSlow",
                       "tagType": "AtomicTag",
@@ -53070,7 +53075,7 @@
                     },
                     {
                       "dataType": "Boolean",
-                      "documentation": "when TRUE \u003d block next phase activation until the calculation for the preceding phase is executed",
+                      "documentation": "when TRUE = block next phase activation until the calculation for the preceding phase is executed",
                       "name": "reqCalculation",
                       "tagGroup": "GroupFast",
                       "tagType": "AtomicTag",
@@ -56865,7 +56870,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d str(tag[\u0027parameters\u0027][\u0027EquipmentName\u0027])\n\t\tsavePath\u003d str(tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027])\n\t\t#call the function for storing in a csv file the actual value of the phases dictionary\n\t\t#GeneralFunctions.storeStateDatasetToCsv(tagPath, equipName, savePath)\t\n\t\tGeneralFunctions.storeEquipmentStateDatasetToCsv(tagPath, equipName, savePath)\t"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = str(tag['parameters']['EquipmentName'])\n\t\tsavePath= str(tag['parameters']['ParentSavePath'])\n\t\t#call the function for storing in a csv file the actual value of the phases dictionary\n\t\t#GeneralFunctions.storeStateDatasetToCsv(tagPath, equipName, savePath)\t\n\t\tGeneralFunctions.storeEquipmentStateDatasetToCsv(tagPath, equipName, savePath)\t"
                             }
                           ],
                           "name": "SaveEquipmentStateDataset",
@@ -56876,11 +56881,11 @@
                         },
                         {
                           "dataType": "Boolean",
-                          "documentation": "saves all opc tag\u0027s paths into a csv file so they can be later restored",
+                          "documentation": "saves all opc tag's paths into a csv file so they can be later restored",
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d str(tag[\u0027parameters\u0027][\u0027EquipmentName\u0027])\n\t\tsavePath \u003d str(tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027])\n\t\t#equipBasePath \u003d tag[\u0027parameters\u0027][\u0027PathToTargetEquip\u0027]\n\t\t#call the function for creating the csv file which contains all the tag opc paths\n\t\tGeneralFunctions.storeTagOpcPathsToCsv(tagPath, equipName, savePath)\t\t"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = str(tag['parameters']['EquipmentName'])\n\t\tsavePath = str(tag['parameters']['ParentSavePath'])\n\t\t#equipBasePath = tag['parameters']['PathToTargetEquip']\n\t\t#call the function for creating the csv file which contains all the tag opc paths\n\t\tGeneralFunctions.storeTagOpcPathsToCsv(tagPath, equipName, savePath)\t\t"
                             }
                           ],
                           "name": "SaveOpcPaths",
@@ -56895,7 +56900,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value \u003d\u003d True and previousValue.value \u003d\u003d False:\n\t\tphaseNo \u003d CriticalParamLib.recipePhaseNo\n\t\tparamNo \u003d CriticalParamLib.phaseParamNo \n\t\ttargetEquipBasePath \u003d tag[\u0027parameters\u0027][\u0027PathToTargetEquip\u0027]\n\t\t#call the script for reseting all the critical calculations results \n\t\tCriticalParamLib.resetCriticalParamResults(targetEquipBasePath,phaseNo,paramNo)\n\t\tsystem.tag.writeBlocking(tagPath, False)"
+                              "script": "\tif not initialChange and currentValue.value == True and previousValue.value == False:\n\t\tphaseNo = CriticalParamLib.recipePhaseNo\n\t\tparamNo = CriticalParamLib.phaseParamNo \n\t\ttargetEquipBasePath = tag['parameters']['PathToTargetEquip']\n\t\t#call the script for reseting all the critical calculations results \n\t\tCriticalParamLib.resetCriticalParamResults(targetEquipBasePath,phaseNo,paramNo)\n\t\tsystem.tag.writeBlocking(tagPath, False)"
                             }
                           ],
                           "name": "ResetMesResults",
@@ -56910,7 +56915,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d str(tag[\u0027parameters\u0027][\u0027EquipmentName\u0027])\n\t\tsavePath\u003d str(tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027])\n\t\t#call the function for restoring from a csv file the value of the phases dictionary\n\t\tGeneralFunctions.restoreOperationModeDatasetFromCsv(tagPath, equipName, savePath)\t"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = str(tag['parameters']['EquipmentName'])\n\t\tsavePath= str(tag['parameters']['ParentSavePath'])\n\t\t#call the function for restoring from a csv file the value of the phases dictionary\n\t\tGeneralFunctions.restoreOperationModeDatasetFromCsv(tagPath, equipName, savePath)\t"
                             }
                           ],
                           "name": "RestoreOperationModeDataset ",
@@ -56933,7 +56938,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d str(tag[\u0027parameters\u0027][\u0027EquipmentName\u0027])\n\t\tsavePath\u003d str(tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027])\n\t\t#call the function for storing in a csv file the actual value of the phases dictionary\n\t\tGeneralFunctions.storePhaseDatasetToCsv(tagPath, equipName, savePath)\t"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = str(tag['parameters']['EquipmentName'])\n\t\tsavePath= str(tag['parameters']['ParentSavePath'])\n\t\t#call the function for storing in a csv file the actual value of the phases dictionary\n\t\tGeneralFunctions.storePhaseDatasetToCsv(tagPath, equipName, savePath)\t"
                             }
                           ],
                           "name": "SavePhaseDataset",
@@ -56948,7 +56953,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d str(tag[\u0027parameters\u0027][\u0027EquipmentName\u0027])\n\t\tsavePath\u003d str(tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027])\n\t\t#call the function for storing in a csv file the actual value of the phases dictionary\n\t\t#GeneralFunctions.storeStateDatasetToCsv(tagPath, equipName, savePath)\t\n\t\tGeneralFunctions.storeOperationModeDatasetToCsv(tagPath, equipName, savePath)\t"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = str(tag['parameters']['EquipmentName'])\n\t\tsavePath= str(tag['parameters']['ParentSavePath'])\n\t\t#call the function for storing in a csv file the actual value of the phases dictionary\n\t\t#GeneralFunctions.storeStateDatasetToCsv(tagPath, equipName, savePath)\t\n\t\tGeneralFunctions.storeOperationModeDatasetToCsv(tagPath, equipName, savePath)\t"
                             }
                           ],
                           "name": "SaveOperationModeDataset",
@@ -56971,7 +56976,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d tag[\u0027parameters\u0027][\u0027EquipmentName\u0027]\n\t\tsavePath\u003d tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027]\n\t\t#call the function for restoring the tags opc paths from the previously generated csv file\n\t\tGeneralFunctions.restoreTagOpcPathsFromCsv(tagPath, equipName, savePath)\n"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = tag['parameters']['EquipmentName']\n\t\tsavePath= tag['parameters']['ParentSavePath']\n\t\t#call the function for restoring the tags opc paths from the previously generated csv file\n\t\tGeneralFunctions.restoreTagOpcPathsFromCsv(tagPath, equipName, savePath)\n"
                             }
                           ],
                           "name": "RestoreOpcPaths",
@@ -56990,11 +56995,11 @@
                         },
                         {
                           "dataType": "Boolean",
-                          "documentation": "saves all opc tag\u0027s paths into a csv file so they can be later restored",
+                          "documentation": "saves all opc tag's paths into a csv file so they can be later restored",
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d str(tag[\u0027parameters\u0027][\u0027EquipmentName\u0027])\n\t\tsavePath \u003d str(tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027])\n\t\t#call the function for creating the csv tag list\n\t\tGeneralFunctions.storeTagDataToCsv(tagPath, equipName, savePath, 5)\n\t\t"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = str(tag['parameters']['EquipmentName'])\n\t\tsavePath = str(tag['parameters']['ParentSavePath'])\n\t\t#call the function for creating the csv tag list\n\t\tGeneralFunctions.storeTagDataToCsv(tagPath, equipName, savePath, 5)\n\t\t"
                             }
                           ],
                           "name": "generateTagListFile",
@@ -57009,7 +57014,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value and not previousValue.value:\n\t\tequipBasePath \u003d tag[\u0027parameters\u0027][\u0027PathToTargetEquip\u0027]\n\t\tCriticalParamLib.generateProcessValuesDataset(equipBasePath,tagPath,6)"
+                              "script": "\tif not initialChange and currentValue.value and not previousValue.value:\n\t\tequipBasePath = tag['parameters']['PathToTargetEquip']\n\t\tCriticalParamLib.generateProcessValuesDataset(equipBasePath,tagPath,6)"
                             }
                           ],
                           "name": "GenerateProcValuesDataset",
@@ -57024,7 +57029,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d str(tag[\u0027parameters\u0027][\u0027EquipmentName\u0027])\n\t\tsavePath\u003d str(tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027])\n\t\t#call the function for restoring from a csv file the value of the phases dictionary\n\t\tGeneralFunctions.restoreEquipmentStateDatasetFromCsv(tagPath, equipName, savePath)\t"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = str(tag['parameters']['EquipmentName'])\n\t\tsavePath= str(tag['parameters']['ParentSavePath'])\n\t\t#call the function for restoring from a csv file the value of the phases dictionary\n\t\tGeneralFunctions.restoreEquipmentStateDatasetFromCsv(tagPath, equipName, savePath)\t"
                             }
                           ],
                           "name": "RestoreEquipmentStateDataset",
@@ -57039,7 +57044,7 @@
                           "eventScripts": [
                             {
                               "eventid": "valueChanged",
-                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment\u0027s config parameters\n\t\tequipName \u003d str(tag[\u0027parameters\u0027][\u0027EquipmentName\u0027])\n\t\tsavePath\u003d str(tag[\u0027parameters\u0027][\u0027ParentSavePath\u0027])\n\t\t#call the function for restoring from a csv file the value of the phases dictionary\n\t\tGeneralFunctions.restorePhaseDatasetFromCsv(tagPath, equipName, savePath)\t"
+                              "script": "\tif not initialChange and currentValue.value:\n\t\t#read the equipment's config parameters\n\t\tequipName = str(tag['parameters']['EquipmentName'])\n\t\tsavePath= str(tag['parameters']['ParentSavePath'])\n\t\t#call the function for restoring from a csv file the value of the phases dictionary\n\t\tGeneralFunctions.restorePhaseDatasetFromCsv(tagPath, equipName, savePath)\t"
                             }
                           ],
                           "name": "RestorePhaseDataset",
@@ -61277,7 +61282,7 @@
                           "tagType": "Folder",
                           "tags": [
                             {
-                              "documentation": "current working mode on the equipment ( e.g. 0 \u003d stopped; 1 \u003d running ; 2 \u003d stopped; 3 \u003d change over....)",
+                              "documentation": "current working mode on the equipment ( e.g. 0 = stopped; 1 = running ; 2 = stopped; 3 = change over....)",
                               "enabled": true,
                               "name": "EquipmentState",
                               "readOnly": true,
@@ -61286,7 +61291,7 @@
                               "valueSource": "opc"
                             },
                             {
-                              "documentation": "current working mode on the equipment ( e.g. 0 \u003d stopped; 1 \u003d running ; 2 \u003d stopped; 3 \u003d change over....)",
+                              "documentation": "current working mode on the equipment ( e.g. 0 = stopped; 1 = running ; 2 = stopped; 3 = change over....)",
                               "name": "OperationMode",
                               "readOnly": true,
                               "tagGroup": "GroupSlow",
@@ -61364,7 +61369,7 @@
                               "historyProvider": "Edge Historian",
                               "includeMetadata": true,
                               "name": "RejectedPartsCounter",
-                              "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]ReadOnly/ReadOnlyInteger1",
+                              "opcItemPath": "ns=1;s=[Simulator Device]ReadOnly/ReadOnlyInteger1",
                               "opcServer": "Ignition OPC UA Server",
                               "tagGroup": "Default Historical",
                               "tagType": "AtomicTag",
@@ -61379,7 +61384,7 @@
                               "historyProvider": "Edge Historian",
                               "includeMetadata": true,
                               "name": "GoodPartsCounter",
-                              "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]Random/RandomInteger1",
+                              "opcItemPath": "ns=1;s=[Simulator Device]Random/RandomInteger1",
                               "opcServer": "Ignition OPC UA Server",
                               "tagGroup": "Default Historical",
                               "tagType": "AtomicTag",
@@ -61395,7 +61400,7 @@
                               "historyProvider": "Edge Historian",
                               "includeMetadata": true,
                               "name": "OperationMode",
-                              "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]Random/RandomInteger2",
+                              "opcItemPath": "ns=1;s=[Simulator Device]Random/RandomInteger2",
                               "opcServer": "Ignition OPC UA Server",
                               "tagGroup": "Default Historical",
                               "tagType": "AtomicTag",
@@ -61442,7 +61447,7 @@
                               "historyProvider": "Edge Historian",
                               "includeMetadata": true,
                               "name": "GoodPartsCounter",
-                              "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]Random/RandomInteger1",
+                              "opcItemPath": "ns=1;s=[Simulator Device]Random/RandomInteger1",
                               "opcServer": "Ignition OPC UA Server",
                               "tagGroup": "Default Historical",
                               "tagType": "AtomicTag",
@@ -61521,7 +61526,7 @@
                               "historyProvider": "Edge Historian",
                               "includeMetadata": true,
                               "name": "RejectedPartsCounter",
-                              "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]ReadOnly/ReadOnlyInteger1",
+                              "opcItemPath": "ns=1;s=[Simulator Device]ReadOnly/ReadOnlyInteger1",
                               "opcServer": "Ignition OPC UA Server",
                               "tagGroup": "Default Historical",
                               "tagType": "AtomicTag",
@@ -61537,7 +61542,7 @@
                               "historyProvider": "Edge Historian",
                               "includeMetadata": true,
                               "name": "OperationMode",
-                              "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]Random/RandomInteger2",
+                              "opcItemPath": "ns=1;s=[Simulator Device]Random/RandomInteger2",
                               "opcServer": "Ignition OPC UA Server",
                               "tagGroup": "Default Historical",
                               "tagType": "AtomicTag",
@@ -61552,7 +61557,7 @@
                               "historyProvider": "Edge Historian",
                               "includeMetadata": true,
                               "name": "GoodPartsCounter",
-                              "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]Random/RandomInteger1",
+                              "opcItemPath": "ns=1;s=[Simulator Device]Random/RandomInteger1",
                               "opcServer": "Ignition OPC UA Server",
                               "tagGroup": "Default Historical",
                               "tagType": "AtomicTag",
@@ -61664,7 +61669,7 @@
                               "historyProvider": "Edge Historian",
                               "includeMetadata": true,
                               "name": "RejectedPartsCounter",
-                              "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]ReadOnly/ReadOnlyInteger1",
+                              "opcItemPath": "ns=1;s=[Simulator Device]ReadOnly/ReadOnlyInteger1",
                               "opcServer": "Ignition OPC UA Server",
                               "tagGroup": "Default Historical",
                               "tagType": "AtomicTag",
@@ -61679,7 +61684,7 @@
                               "historyProvider": "Edge Historian",
                               "includeMetadata": true,
                               "name": "GoodPartsCounter",
-                              "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]Random/RandomInteger1",
+                              "opcItemPath": "ns=1;s=[Simulator Device]Random/RandomInteger1",
                               "opcServer": "Ignition OPC UA Server",
                               "tagGroup": "Default Historical",
                               "tagType": "AtomicTag",
@@ -61695,7 +61700,7 @@
                               "historyProvider": "Edge Historian",
                               "includeMetadata": true,
                               "name": "OperationMode",
-                              "opcItemPath": "ns\u003d1;s\u003d[Simulator Device]Random/RandomInteger2",
+                              "opcItemPath": "ns=1;s=[Simulator Device]Random/RandomInteger2",
                               "opcServer": "Ignition OPC UA Server",
                               "tagGroup": "Default Historical",
                               "tagType": "AtomicTag",
