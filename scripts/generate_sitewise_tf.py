@@ -191,6 +191,42 @@ def find_udt_types(data: dict, path: str = "") -> list:
     return udt_types
 
 
+def generate_providers_tf(site: str, gen_type: str) -> str:
+    """Generate providers.tf with backend config and provider declaration.
+
+    Uses partial backend config — bucket/region come from env/{env}/backend.hcl
+    at init time. Only the key is set here (unique per site/models).
+    """
+    if gen_type == "models":
+        state_key = "sitewise-models.tfstate"
+    else:
+        state_key = f"sitewise-{site.lower()}.tfstate"
+
+    return f'''terraform {{
+  required_providers {{
+    awscc = {{
+      source  = "hashicorp/awscc"
+      version = "~> 1.0"
+    }}
+  }}
+
+  backend "s3" {{
+    key = "{state_key}"
+  }}
+}}
+
+provider "awscc" {{
+  region = var.aws_region
+}}
+
+variable "aws_region" {{
+  description = "AWS region for SiteWise resources"
+  type        = string
+  default     = "us-east-1"
+}}
+'''
+
+
 def generate_model_tf(data: dict) -> str:
     """Generate Terraform for SiteWise asset models from UDT JSON."""
     validate_model_json(data)
@@ -369,6 +405,15 @@ def main():
         os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True)
         with open(output_path, "w") as f:
             f.write(tf_content)
+
+        # Generate providers.tf if it doesn't exist in the output directory
+        output_dir = os.path.dirname(output_path) if os.path.dirname(output_path) else "."
+        providers_path = os.path.join(output_dir, "providers.tf")
+        if not os.path.exists(providers_path):
+            providers_content = generate_providers_tf(args.site, gen_type)
+            with open(providers_path, "w") as f:
+                f.write(providers_content)
+            print(f"  Generated: {providers_path}")
 
         # Generate change summary
         added = new_properties - existing_properties
