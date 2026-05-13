@@ -13,7 +13,14 @@ resource "awscc_iotsitewise_asset_model" "mixingedgetoplatform" {
       }
     },
     {
-      name      = "EdgeData/ProcessValues/NewSensorV2"
+      name      = "EdgeData/ProcessValues/FlowRate"
+      data_type = "DOUBLE"
+      type = {
+        measurement = {}
+      }
+    },
+    {
+      name      = "EdgeData/ProcessValues/MotorCurrent"
       data_type = "DOUBLE"
       type = {
         measurement = {}
