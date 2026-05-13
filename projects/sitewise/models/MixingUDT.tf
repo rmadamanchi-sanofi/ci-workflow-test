@@ -48,6 +48,13 @@ resource "awscc_iotsitewise_asset_model" "mixingedgetoplatform" {
       }
     },
     {
+      name      = "EdgeData/ProcessValues/TorqueOutput"
+      data_type = "DOUBLE"
+      type = {
+        measurement = {}
+      }
+    },
+    {
       name      = "EdgeData/ProcessValues/Vibration"
       data_type = "DOUBLE"
       type = {
